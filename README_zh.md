@@ -21,7 +21,7 @@
     <img alt="License: MIT" src="https://img.shields.io/badge/LICENSE-MIT-brightgreen.svg?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=000000&logoWidth=20">
   </a>
   <a href="https://www.python.org/downloads/">
-    <img alt="Python 3.11+" src="https://img.shields.io/badge/PYTHON-3.11+-blue.svg?style=for-the-badge&logo=python&logoColor=white&labelColor=000000&logoWidth=20">
+    <img alt="Python 3.12+" src="https://img.shields.io/badge/PYTHON-3.12+-blue.svg?style=for-the-badge&logo=python&logoColor=white&labelColor=000000&logoWidth=20">
   </a>
   <a href="https://github.com/flysheep-ai/NoAlpha/actions/workflows/tests.yml">
     <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/flysheep-ai/NoAlpha/tests.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&labelColor=000000&label=TESTS">
