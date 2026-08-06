@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from ..i18n import DEFAULT_LANG, t
+
 
 @dataclass
 class AgentReport:
@@ -102,8 +104,12 @@ class TradingAgentsOrchestrator:
     execution remain deterministic and external to the agent layer.
     """
 
-    def __init__(self, profile: dict[str, float]) -> None:
+    def __init__(self, profile: dict[str, float], lang: str = DEFAULT_LANG) -> None:
         self.profile = profile
+        self.lang = lang
+
+    def _t(self, zh: str, en: str) -> str:
+        return t(self.lang, zh, en)
 
     def run(
         self,
@@ -130,9 +136,11 @@ class TradingAgentsOrchestrator:
         fund_manager = {
             "verdict": "approve" if approved else "reject",
             "reason": (
-                "多角色报告允许进入外部硬风控"
+                self._t("多角色报告允许进入外部硬风控",
+                        "multi-role report clears the way to the external hard risk engine")
                 if approved else
-                "角色层风险守卫拒绝进入下单链路"
+                self._t("角色层风险守卫拒绝进入下单链路",
+                        "role-layer risk guardian blocked entry to the order chain")
             ),
             "sizing_adjustment": sizing_adjustment,
             "hard_risk_engine_required": True,
@@ -150,18 +158,24 @@ class TradingAgentsOrchestrator:
     ) -> AgentReport:
         bullish: list[str] = []
         bearish: list[str] = []
+        mom5 = self._t(f"5日动量 {signals.get('mom_5d', 0.0):+.2%}",
+                       f"5-day momentum {signals.get('mom_5d', 0.0):+.2%}")
+        mom20 = self._t(f"20日动量 {signals.get('mom_20d', 0.0):+.2%}",
+                        f"20-day momentum {signals.get('mom_20d', 0.0):+.2%}")
         if signals.get("mom_5d", 0.0) > 0.02:
-            bullish.append(f"5日动量 {signals['mom_5d']:+.2%}")
+            bullish.append(mom5)
         elif signals.get("mom_5d", 0.0) < -0.02:
-            bearish.append(f"5日动量 {signals['mom_5d']:+.2%}")
+            bearish.append(mom5)
         if signals.get("mom_20d", 0.0) > 0.05:
-            bullish.append(f"20日动量 {signals['mom_20d']:+.2%}")
+            bullish.append(mom20)
         elif signals.get("mom_20d", 0.0) < -0.05:
-            bearish.append(f"20日动量 {signals['mom_20d']:+.2%}")
+            bearish.append(mom20)
         if signals.get("price_vs_ma20", 0.0) > 0:
-            bullish.append(f"价格高于20日均线 {signals['price_vs_ma20']:+.2%}")
+            bullish.append(self._t(f"价格高于20日均线 {signals['price_vs_ma20']:+.2%}",
+                                   f"price above the 20-day MA by {signals['price_vs_ma20']:+.2%}"))
         elif signals.get("price_vs_ma20", 0.0) < 0:
-            bearish.append(f"价格低于20日均线 {signals['price_vs_ma20']:+.2%}")
+            bearish.append(self._t(f"价格低于20日均线 {signals['price_vs_ma20']:+.2%}",
+                                   f"price below the 20-day MA by {signals['price_vs_ma20']:+.2%}"))
 
         stance = "bullish" if len(bullish) > len(bearish) else "bearish" if len(bearish) > len(bullish) else "neutral"
         confidence = min(0.9, 0.45 + 0.12 * abs(len(bullish) - len(bearish)))
@@ -170,10 +184,14 @@ class TradingAgentsOrchestrator:
             role="technical_analyst",
             stance=stance,
             confidence=confidence,
-            summary=f"{symbol} 技术面为 {stance}：{'; '.join(observations) or '方向信号不明显'}",
+            summary=self._t(
+                f"{symbol} 技术面为 {stance}：{'; '.join(observations) or '方向信号不明显'}",
+                f"{symbol} technicals read {stance}: "
+                f"{'; '.join(observations) or 'no clear directional signal'}"),
             evidence_ids=evidence_ids,
             observations=observations,
-            risks=["技术信号在震荡市中容易反复"] if stance != "neutral" else [],
+            risks=[self._t("技术信号在震荡市中容易反复",
+                           "technical signals whipsaw in range-bound markets")] if stance != "neutral" else [],
         )
 
     def _quant_analyst(
@@ -185,7 +203,9 @@ class TradingAgentsOrchestrator:
                 role="quant_analyst",
                 stance=stance,
                 confidence=min(0.85, max(0.2, score)),
-                summary=f"{symbol} 暂无ACTIVE量化模型视图，使用候选评分 {score:.2f}",
+                summary=self._t(
+                    f"{symbol} 暂无ACTIVE量化模型视图，使用候选评分 {score:.2f}",
+                    f"{symbol} has no ACTIVE quant model view; using candidate score {score:.2f}"),
                 observations=[f"heuristic_score={score:.2f}"],
                 status="degraded",
             )
@@ -199,7 +219,10 @@ class TradingAgentsOrchestrator:
             role="quant_analyst",
             stance=stance,
             confidence=float(quant_view.get("confidence") or quant_view.get("probability_up") or 0.6),
-            summary=f"{symbol} 量化排名 {rank}/{universe}，预期收益 {pred if pred is not None else 'n/a'}",
+            summary=self._t(
+                f"{symbol} 量化排名 {rank}/{universe}，预期收益 {pred if pred is not None else 'n/a'}",
+                f"{symbol} quant rank {rank}/{universe}, predicted return "
+                f"{pred if pred is not None else 'n/a'}"),
             observations=[f"rank={rank}/{universe}", f"model={quant_view.get('model') or quant_view.get('model_id', '')}"],
             status="available",
         )
@@ -209,9 +232,13 @@ class TradingAgentsOrchestrator:
             role="fundamental_analyst",
             stance="neutral",
             confidence=0.0,
-            summary=f"{symbol} 基本面数据未接入本交易循环，不参与方向判断",
+            summary=self._t(
+                f"{symbol} 基本面数据未接入本交易循环，不参与方向判断",
+                f"{symbol} fundamental data is not wired into this trading loop; it takes no part "
+                f"in the directional call"),
             status="unavailable",
-            risks=["缺少估值、盈利、资产负债和指引数据"],
+            risks=[self._t("缺少估值、盈利、资产负债和指引数据",
+                           "no valuation, earnings, balance-sheet or guidance data")],
         )
 
     def _news_analyst(self, symbol: str) -> AgentReport:
@@ -219,9 +246,11 @@ class TradingAgentsOrchestrator:
             role="news_analyst",
             stance="neutral",
             confidence=0.0,
-            summary=f"{symbol} 新闻/公告实时源未接入本交易循环",
+            summary=self._t(f"{symbol} 新闻/公告实时源未接入本交易循环",
+                            f"{symbol} live news/filing feeds are not wired into this trading loop"),
             status="unavailable",
-            risks=["可能漏掉公告、监管、宏观和突发事件"],
+            risks=[self._t("可能漏掉公告、监管、宏观和突发事件",
+                           "filings, regulatory, macro and breaking events may be missed")],
         )
 
     def _sentiment_analyst(self, symbol: str) -> AgentReport:
@@ -229,9 +258,11 @@ class TradingAgentsOrchestrator:
             role="sentiment_analyst",
             stance="neutral",
             confidence=0.0,
-            summary=f"{symbol} 社媒/市场情绪源未接入本交易循环",
+            summary=self._t(f"{symbol} 社媒/市场情绪源未接入本交易循环",
+                            f"{symbol} social/sentiment feeds are not wired into this trading loop"),
             status="unavailable",
-            risks=["缺少情绪拥挤度和散户行为验证"],
+            risks=[self._t("缺少情绪拥挤度和散户行为验证",
+                           "no sentiment-crowding or retail-behaviour corroboration")],
         )
 
     def _research_debate(self, symbol: str, analysts: list[AgentReport]) -> ResearchDebate:
@@ -252,20 +283,29 @@ class TradingAgentsOrchestrator:
                 role="bull_researcher",
                 stance="bullish",
                 confidence=round(bull_conf, 4),
-                summary=f"{symbol} 多头研究员采纳 {len(bullish_reports)} 个看多报告",
+                summary=self._t(
+                    f"{symbol} 多头研究员采纳 {len(bullish_reports)} 个看多报告",
+                    f"{symbol} bull researcher adopted {len(bullish_reports)} bullish report(s)"),
                 observations=[a.summary for a in bullish_reports],
             ),
             bear=AgentReport(
                 role="bear_researcher",
                 stance="bearish",
                 confidence=round(bear_conf, 4),
-                summary=f"{symbol} 空头研究员采纳 {len(bearish_reports)} 个看空报告，并标记缺口：{', '.join(unavailable) or '无'}",
+                summary=self._t(
+                    f"{symbol} 空头研究员采纳 {len(bearish_reports)} 个看空报告，"
+                    f"并标记缺口：{', '.join(unavailable) or '无'}",
+                    f"{symbol} bear researcher adopted {len(bearish_reports)} bearish report(s) "
+                    f"and flagged gaps: {', '.join(unavailable) or 'none'}"),
                 observations=[a.summary for a in bearish_reports],
                 risks=[r for a in analysts for r in a.risks],
             ),
             consensus=consensus,
             conflict_level=round(conflict, 4),
-            balance_note="多空辩论基于已接入数据；未接入角色只作为风险缺口，不伪造结论",
+            balance_note=self._t(
+                "多空辩论基于已接入数据；未接入角色只作为风险缺口，不伪造结论",
+                "The debate runs on connected data only; unconnected roles are recorded as risk gaps "
+                "rather than fabricated into conclusions"),
         )
 
     def _trader(
@@ -281,24 +321,31 @@ class TradingAgentsOrchestrator:
         base = self.profile["base_target_weight"]
         target = min(self.profile["max_position_weight"], base * (0.5 + confidence))
         why_now = [
-            f"候选评分 {score:.2f} / 阈值 {self.profile['buy_score_threshold']:.2f}",
-            f"多空共识 {debate.consensus}，冲突 {debate.conflict_level:.2f}",
+            self._t(f"候选评分 {score:.2f} / 阈值 {self.profile['buy_score_threshold']:.2f}",
+                    f"candidate score {score:.2f} vs threshold {self.profile['buy_score_threshold']:.2f}"),
+            self._t(f"多空共识 {debate.consensus}，冲突 {debate.conflict_level:.2f}",
+                    f"bull/bear consensus {debate.consensus}, conflict {debate.conflict_level:.2f}"),
         ]
         if signals.get("volume_ratio", 0.0) >= 2.0:
-            why_now.append(f"量比 {signals['volume_ratio']:.1f}x")
+            why_now.append(self._t(f"量比 {signals['volume_ratio']:.1f}x",
+                                   f"volume ratio {signals['volume_ratio']:.1f}x"))
         return TraderPlan(
             action_hint=action,
             target_weight_hint=round(target, 4),
             confidence=round(confidence, 4),
-            thesis=(
+            thesis=self._t(
                 f"TradingAgents 交易员计划：{name}({symbol}) 当前共识为 {debate.consensus}，"
-                f"候选评分 {score:.2f}，建议 {action}。"
+                f"候选评分 {score:.2f}，建议 {action}。",
+                f"TradingAgents trader plan: {name} ({symbol}) consensus is {debate.consensus}, "
+                f"candidate score {score:.2f}, suggested action {action}.",
             ),
             why_now=why_now,
             invalidation_conditions=[
-                "多空共识转为 bearish",
-                "技术趋势跌破20日均线且短期动量转负",
-                "外部风控引擎拒绝或降仓",
+                self._t("多空共识转为 bearish", "consensus flips to bearish"),
+                self._t("技术趋势跌破20日均线且短期动量转负",
+                        "trend breaks below the 20-day MA and short-term momentum turns negative"),
+                self._t("外部风控引擎拒绝或降仓",
+                        "the external risk engine rejects or downsizes the position"),
             ],
         )
 
@@ -309,7 +356,9 @@ class TradingAgentsOrchestrator:
             RiskGuardianReview(
                 name="aggressive_risk_guardian",
                 verdict="approve" if trader.action_hint != "no_action" else "pass",
-                reason=f"{symbol} 只允许进入外部硬风控，不直接执行",
+                reason=self._t(f"{symbol} 只允许进入外部硬风控，不直接执行",
+                               f"{symbol} may only proceed to the external hard risk engine, "
+                               f"never straight to execution"),
                 max_weight=self.profile["max_position_weight"],
             )
         ]
@@ -318,7 +367,9 @@ class TradingAgentsOrchestrator:
             reviews.append(RiskGuardianReview(
                 name="conservative_risk_guardian",
                 verdict="downsize",
-                reason=f"20日波动率 {vol:.2%} 偏高，角色层建议目标仓位打八折",
+                reason=self._t(f"20日波动率 {vol:.2%} 偏高，角色层建议目标仓位打八折",
+                               f"20-day volatility {vol:.2%} is elevated; the role layer suggests "
+                               f"cutting the target size to 80%"),
                 max_weight=self.profile["max_position_weight"] * 0.8,
                 adjustment=0.8,
             ))
@@ -326,7 +377,8 @@ class TradingAgentsOrchestrator:
             reviews.append(RiskGuardianReview(
                 name="conservative_risk_guardian",
                 verdict="approve",
-                reason="未发现角色层波动率降仓触发条件",
+                reason=self._t("未发现角色层波动率降仓触发条件",
+                               "no role-layer volatility downsizing trigger was met"),
                 max_weight=self.profile["max_position_weight"],
             ))
         return reviews

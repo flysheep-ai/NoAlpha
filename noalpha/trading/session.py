@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from ..i18n import DEFAULT_LANG
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -56,6 +58,9 @@ class TradingSession:
     max_daily_loss_pct: float = 0.05
     max_orders_per_day: int = 20
     allow_closed_market_fills: bool = False
+    # Language for narratives this session generates. Applies at write time, so
+    # changing it affects future cycles only — see noalpha/i18n.py.
+    lang: str = DEFAULT_LANG
     cycle_count: int = 0
     risk_rejections: int = 0
     last_cycle_at: str = ""
@@ -76,6 +81,7 @@ class TradingSession:
             "max_daily_loss_pct": self.max_daily_loss_pct,
             "max_orders_per_day": self.max_orders_per_day,
             "allow_closed_market_fills": self.allow_closed_market_fills,
+            "lang": self.lang,
             "cycle_count": self.cycle_count, "risk_rejections": self.risk_rejections,
             "last_cycle_at": self.last_cycle_at, "next_cycle_at": self.next_cycle_at,
             "error": self.error,
@@ -264,6 +270,7 @@ class TradingStore:
             max_daily_loss_pct=d.get("max_daily_loss_pct", 0.05),
             max_orders_per_day=d.get("max_orders_per_day", 20),
             allow_closed_market_fills=d.get("allow_closed_market_fills", False),
+            lang=d.get("lang", DEFAULT_LANG),
             cycle_count=d.get("cycle_count", 0),
             risk_rejections=d.get("risk_rejections", 0),
             last_cycle_at=d.get("last_cycle_at", ""), next_cycle_at=d.get("next_cycle_at", ""),

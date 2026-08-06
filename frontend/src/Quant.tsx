@@ -150,7 +150,7 @@ export function QuantPage({ lang }: { lang: string }) {
         <div className="section-title" style={{ display: "flex", justifyContent: "space-between" }}>
           <span>{zh ? "因子表现（全样本 IC，无拟合）" : "Factor performance (full-sample IC, no fitting)"}</span>
           <span>
-            <button className={`btn ${market === "cn" ? "primary" : ""}`} onClick={() => setMarket("cn")}>A股</button>{" "}
+            <button className={`btn ${market === "cn" ? "primary" : ""}`} onClick={() => setMarket("cn")}>{zh ? "A股" : "A-shares"}</button>{" "}
             <button className={`btn ${market === "us" ? "primary" : ""}`} onClick={() => setMarket("us")}>US</button>
           </span>
         </div>

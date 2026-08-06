@@ -32,6 +32,27 @@ CN_INDEX_SECIDS = ["1.000001", "0.399001", "0.399006", "1.000688"]
 US_INDEX_SECIDS = ["100.SPX", "100.NDX", "100.DJIA"]
 INDEX_SECIDS = set(CN_INDEX_SECIDS + US_INDEX_SECIDS)
 
+# Display names per locale, as (en, zh). Providers return Chinese names for
+# every index including the US ones, so an English UI needs this mapping.
+# Only indices we already list above appear here — nothing is invented.
+INDEX_DISPLAY_NAMES: dict[str, tuple[str, str]] = {
+    "100.SPX":  ("S&P 500",        "标普500"),
+    "100.NDX":  ("Nasdaq 100",     "纳斯达克100"),
+    "100.DJIA": ("Dow Jones",      "道琼斯工业"),
+    "1.000001": ("SSE Composite",  "上证指数"),
+    "0.399001": ("SZSE Component", "深证成指"),
+    "0.399006": ("ChiNext",        "创业板指"),
+    "1.000688": ("SSE STAR 50",    "科创50"),
+}
+
+
+def index_display_name(secid: str, zh: bool, fallback: str = "") -> str:
+    """Localized index name, falling back to whatever the provider returned."""
+    entry = INDEX_DISPLAY_NAMES.get(secid)
+    if not entry:
+        return fallback
+    return entry[1] if zh else entry[0]
+
 
 @dataclass(frozen=True)
 class SecId:

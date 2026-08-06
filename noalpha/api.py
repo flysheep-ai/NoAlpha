@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from noalpha.domain import AsOfContext, parse_datetime
 from noalpha.env import load_env
+from noalpha.i18n import DEFAULT_LANG, t
 from noalpha.llm.config import LLMConfig
 from noalpha.pipeline import InvestigationPipeline, InvestigationResult
 from noalpha.progress import PersistentProgressReporter
@@ -441,7 +442,8 @@ def create_app(state_dir: Path | None = None) -> FastAPI:
         return {"case": _case_summary(case, detailed=True), "snapshots": [snapshot.__dict__ | {"created_at": _dt(snapshot.created_at)} for snapshot in snapshots]}
 
     @app.get("/api/v1/settings")
-    def get_settings() -> dict[str, Any]:
+    def get_settings(lang: str = DEFAULT_LANG) -> dict[str, Any]:
+        # Request-scoped, so this one can honour the caller's language directly.
         token = credentials.marketdata_token
         llm = resolve_llm_config(credentials)
         llm_key_source = "credentials" if credentials.get("LLM_API_KEY") else ("env" if os.environ.get("LLM_API_KEY") else "none")
@@ -458,7 +460,9 @@ def create_app(state_dir: Path | None = None) -> FastAPI:
                 {
                     "provider": "marketdata_app",
                     "name": "MarketData.app",
-                    "description": "美股日K线数据源。免费套餐每天 100 次请求，注册地址 https://www.marketdata.app/",
+                    "description": t(lang,
+                        "美股日K线数据源。免费套餐每天 100 次请求，注册地址 https://www.marketdata.app/",
+                        "US daily bars. The free tier allows 100 requests per day; sign up at https://www.marketdata.app/"),
                     "requires_credentials": True,
                     "credential_key": "MARKETDATA_APP_TOKEN",
                     "configured": bool(token),
@@ -467,7 +471,9 @@ def create_app(state_dir: Path | None = None) -> FastAPI:
                 {
                     "provider": "yahoo_charts",
                     "name": "Yahoo Finance Charts",
-                    "description": "免费美股日K线（OHLCV），通过 Yahoo Finance chart API，无需 API Key",
+                    "description": t(lang,
+                        "免费美股日K线（OHLCV），通过 Yahoo Finance chart API，无需 API Key",
+                        "Free US daily OHLCV via the Yahoo Finance chart API. No API key required."),
                     "requires_credentials": False,
                     "credential_key": None,
                     "configured": True,
@@ -476,7 +482,9 @@ def create_app(state_dir: Path | None = None) -> FastAPI:
                 {
                     "provider": "yahoo_news",
                     "name": "Yahoo Finance RSS",
-                    "description": "免费 RSS 新闻数据源，无需 API Key。注：原型数据源，非正式授权新闻 feed",
+                    "description": t(lang,
+                        "免费 RSS 新闻数据源，无需 API Key。注：原型数据源，非正式授权新闻 feed",
+                        "Free RSS news source, no API key required. Note: a prototype source, not a licensed news feed."),
                     "requires_credentials": False,
                     "credential_key": None,
                     "configured": True,
@@ -485,7 +493,9 @@ def create_app(state_dir: Path | None = None) -> FastAPI:
                 {
                     "provider": "sec_edgar",
                     "name": "SEC EDGAR",
-                    "description": "美国证监会公开财报与披露文件，无需 API Key",
+                    "description": t(lang,
+                        "美国证监会公开财报与披露文件，无需 API Key",
+                        "SEC public financial statements and filings. No API key required."),
                     "requires_credentials": False,
                     "credential_key": None,
                     "configured": True,

@@ -34,16 +34,6 @@ class DecisionMode(str, Enum):
     QUANT_ONLY_FALLBACK = "quant_only_fallback"        # LLM requested but failed
     DETERMINISTIC_FALLBACK = "deterministic_fallback"  # quant AND/OR llm requested but unavailable
 
-DECISION_MODE_LABEL_ZH: dict[str, str] = {
-    "deterministic_signal": "确定性信号策略",
-    "quant_only": "量化模型",
-    "quant_deterministic": "量化排名 + 确定性研究",
-    "llm_research": "LLM 深度研究",
-    "quant_llm_hybrid": "量化 + LLM 混合",
-    "quant_only_fallback": "量化（LLM 降级）",
-    "deterministic_fallback": "确定性信号（降级）",
-}
-
 
 class ExitReason(str, Enum):
     THESIS_INVALIDATED = "thesis_invalidated"

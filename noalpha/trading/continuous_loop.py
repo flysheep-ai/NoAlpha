@@ -17,6 +17,7 @@ from noalpha.market.calendar import (
     GlobalMarketSnapshot, MarketStatus, global_snapshot, market_status,
     Market, MarketSession, MARKET_LABEL,
 )
+from noalpha.i18n import t
 from noalpha.market.live_quote import MarketSession as MS
 from noalpha.trading.autonomous import AutonomousTradingLoop, LiveMarketFeed
 from noalpha.trading.daily_report import (
@@ -95,6 +96,9 @@ class ContinuousIntelligenceLoop:
         self._daily_report_generated_today: bool = False
 
     # ── main loop ──
+
+    def _t(self, zh: str, en: str) -> str:
+        return t(self.session.lang, zh, en)
 
     def _now(self) -> datetime:
         """Clock source: replay time if injected, otherwise real UTC."""
@@ -176,9 +180,11 @@ class ContinuousIntelligenceLoop:
     def _phase_activity(self, phase: OperationPhase, snap: GlobalMarketSnapshot) -> str:
         open_mkts = ", ".join(MARKET_LABEL.get(m, m.value) for m in snap.open_markets())
         if phase == OperationPhase.CROSS_MARKET_MONITORING:
-            return f"监控开放市场：{open_mkts or '无'}"
+            return self._t(f"监控开放市场：{open_mkts or '无'}",
+                           f"Monitoring open markets: {open_mkts or 'none'}")
         if phase == OperationPhase.OVERNIGHT_RESEARCH:
-            return "夜间低频监控：新闻、公告、全球事件"
+            return self._t("夜间低频监控：新闻、公告、全球事件",
+                           "Overnight low-frequency watch: news, filings, global events")
         return ""
 
     # ── phase actions ──
@@ -270,7 +276,11 @@ class ContinuousIntelligenceLoop:
             event = OvernightEvent(
                 event_type="global_market",
                 source_market=mkt.value,
-                summary=f"{MARKET_LABEL.get(mkt, mkt.value)} 当前 {ms.session.value} · {ms.local_time.strftime('%H:%M')}",
+                summary=self._t(
+                    f"{MARKET_LABEL.get(mkt, mkt.value)} 当前 {ms.session.value} · "
+                    f"{ms.local_time.strftime('%H:%M')}",
+                    f"{MARKET_LABEL.get(mkt, mkt.value)} is {ms.session.value} · "
+                    f"{ms.local_time.strftime('%H:%M')}"),
                 affected_symbols=portfolio_symbols,
                 created_at=self._now().isoformat(),
             )
@@ -370,8 +380,13 @@ class ContinuousIntelligenceLoop:
         if failed:
             lessons.append(DailyLesson(
                 lesson_id=str(uuid4())[:12],
-                title="亏损交易集中在动量信号衰减",
-                description=f"今日 {len(failed)}/{len(decisions)} 笔交易亏损，亏损交易大多发生在动量信号减弱的环境中。检查 Evidence 新鲜度和信号质量。",
+                title=self._t("亏损交易集中在动量信号衰减",
+                              "Losing trades cluster where momentum signals decay"),
+                description=self._t(
+                    f"今日 {len(failed)}/{len(decisions)} 笔交易亏损，亏损交易大多发生在动量信号减弱的环境中。"
+                    f"检查 Evidence 新鲜度和信号质量。",
+                    f"{len(failed)} of {len(decisions)} trades lost money today, mostly in conditions "
+                    f"where momentum signals were weakening. Check evidence freshness and signal quality."),
                 evidence_decision_ids=[f.proposal_id for f in failed],
                 evidence_market_data=str(index_changes),
                 confidence=0.7,
@@ -384,9 +399,13 @@ class ContinuousIntelligenceLoop:
         positions_list = [(s, p) for s, p in positions.items() if p.quantity > 0]
         weak = [(s, p) for s, p in positions_list if p.unrealized_pnl < -abs(p.market_value * 0.03)]
         plan_lines = [
-            f"明天重点监控 {len(positions_list)} 个持仓",
-            f"其中 {len(weak)} 个持仓浮亏显著，需要开盘后重新评估" if weak else "",
-            "今日教训：" + ("动量策略胜率下降" if failed else "正常"),
+            self._t(f"明天重点监控 {len(positions_list)} 个持仓",
+                    f"Watch {len(positions_list)} position(s) closely tomorrow"),
+            (self._t(f"其中 {len(weak)} 个持仓浮亏显著，需要开盘后重新评估",
+                     f"{len(weak)} of them carry a material unrealized loss and need re-evaluation "
+                     f"after the open") if weak else ""),
+            (self._t("今日教训：动量策略胜率下降", "Lesson today: momentum hit-rate declined") if failed
+             else self._t("今日教训：正常", "Lesson today: nothing unusual")),
         ]
         pending_actions = [pa for pa in self.pending_actions if not pa.revalidated]
 
@@ -397,7 +416,8 @@ class ContinuousIntelligenceLoop:
             market=self.home_market.value,
             generated_at=self._now().isoformat(),
             market_regime=regime,
-            market_regime_reason=f"基于主要指数变动 {index_changes}",
+            market_regime_reason=self._t(f"基于主要指数变动 {index_changes}",
+                                         f"Based on major index moves {index_changes}"),
             index_performance=index_changes,
             sector_performance={},
             opening_equity=opening,
@@ -429,7 +449,9 @@ class ContinuousIntelligenceLoop:
             tomorrow_pending_actions=[{"plan_id": pa.plan_id, "symbol": pa.symbol,
                                        "action": pa.action, "reason": pa.reason}
                                       for pa in pending_actions],
-            tomorrow_unknowns=["隔夜海外市场可能影响开盘"] if snap.closed_markets() else [],
+            tomorrow_unknowns=[self._t("隔夜海外市场可能影响开盘",
+                                       "Overnight overseas markets may move the open")]
+            if snap.closed_markets() else [],
         )
 
     def _collect_index_performance(self, snap: GlobalMarketSnapshot) -> dict[str, float]:
@@ -462,12 +484,15 @@ class ContinuousIntelligenceLoop:
 
     def _dq_reason(self, dq: DecisionQuality, pnl: float) -> str:
         if dq == DecisionQuality.GOOD_DECISION_GOOD_OUTCOME:
-            return "高置信度决策 + 正收益"
+            return self._t("高置信度决策 + 正收益", "High-confidence decision + positive return")
         if dq == DecisionQuality.GOOD_DECISION_BAD_OUTCOME:
-            return "高置信度决策但意外亏损，需排查是否为外部事件"
+            return self._t("高置信度决策但意外亏损，需排查是否为外部事件",
+                           "High-confidence decision that lost money unexpectedly; check for an "
+                           "external event")
         if dq == DecisionQuality.BAD_DECISION_GOOD_OUTCOME:
-            return "低置信度决策 + 正收益，可能是运气"
-        return "低置信度决策 + 亏损"
+            return self._t("低置信度决策 + 正收益，可能是运气",
+                           "Low-confidence decision + positive return; possibly luck")
+        return self._t("低置信度决策 + 亏损", "Low-confidence decision + loss")
 
     def _analyze_missed(self, no_actions: list[dict]) -> list[MissedOpportunity]:
         missed: list[MissedOpportunity] = []
@@ -479,7 +504,8 @@ class ContinuousIntelligenceLoop:
                 candidate_score=na.get("payload", {}).get("score", 0),
                 subsequent_return=0.0,
                 would_have_pnl=0.0,
-                lesson="需检查未决策原因是否合理",
+                lesson=self._t("需检查未决策原因是否合理",
+                               "Check whether the reason for not acting was sound"),
             ))
         return missed
 

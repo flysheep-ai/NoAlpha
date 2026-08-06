@@ -48,14 +48,6 @@ REGIME_LABELS_EN: dict[MarketRegime, str] = {
     MarketRegime.ROTATION: "Rotation", MarketRegime.UNKNOWN: "Unknown",
 }
 
-DQ_LABELS_ZH: dict[DecisionQuality, str] = {
-    DecisionQuality.GOOD_DECISION_GOOD_OUTCOME: "正确决策·好结果",
-    DecisionQuality.GOOD_DECISION_BAD_OUTCOME: "正确决策·坏结果",
-    DecisionQuality.BAD_DECISION_GOOD_OUTCOME: "错误决策·好结果",
-    DecisionQuality.BAD_DECISION_BAD_OUTCOME: "错误决策·坏结果",
-    DecisionQuality.UNKNOWN: "未知",
-}
-
 
 # ── structured components ──
 

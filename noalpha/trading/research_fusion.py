@@ -23,6 +23,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from ..i18n import DEFAULT_LANG, t
+
 logger = logging.getLogger(__name__)
 
 FUSION_POLICY_VERSION = "fusion-policy:v1"
@@ -276,6 +278,12 @@ class FusionPolicy:
     sets expected return; the LLM confirms, contextualizes or vetoes. The LLM
     alone can never force a large position."""
 
+    def __init__(self, lang: str = DEFAULT_LANG) -> None:
+        self.lang = lang
+
+    def _t(self, zh: str, en: str) -> str:
+        return t(self.lang, zh, en)
+
     def fuse(self, *, symbol: str, secid: str, quant: Any | None,
              llm: LLMResearchSignal | None, holding: bool = False) -> FusionDecision:
         d = FusionDecision(instrument_id=secid, symbol=symbol)
@@ -293,13 +301,16 @@ class FusionPolicy:
             d.llm_contribution = {"missing": True}
             if holding:
                 d.final_signal, d.final_strength = ("reduce", 0.5) if quant_short else ("hold", 1.0)
-                d.explanation = "LLM 信号不可用；持仓管理退化为 quant-only 规则"
+                d.explanation = self._t("LLM 信号不可用；持仓管理退化为 quant-only 规则",
+                                 "LLM signal unavailable; position management falls back to quant-only rules")
             elif quant_long and quant_strength >= 0.6:
                 d.final_signal, d.final_strength = "buy", 0.75
-                d.explanation = "LLM 信号不可用（QUANT_ONLY_FALLBACK）：按量化信号建仓但降低目标 25%"
+                d.explanation = self._t("LLM 信号不可用（QUANT_ONLY_FALLBACK）：按量化信号建仓但降低目标 25%",
+                                 "LLM signal unavailable (QUANT_ONLY_FALLBACK): entering on the quant signal at a 25% reduced target")
             else:
                 d.final_signal = "no_action"
-                d.explanation = "LLM 信号不可用且量化信号不足以单独驱动"
+                d.explanation = self._t("LLM 信号不可用且量化信号不足以单独驱动",
+                                 "LLM signal unavailable and the quant signal is too weak to drive alone")
             return d
 
         d.llm_signal_id = llm.signal_id
@@ -309,13 +320,16 @@ class FusionPolicy:
             d.conflict_state = ConflictState.HIGH_INTERNAL_LLM_CONFLICT
             if holding:
                 d.final_signal, d.final_strength = "reduce", 0.5
-                d.explanation = "LLM bull/bear 同时强（内部高冲突）：持仓减半，等待证据收敛"
+                d.explanation = self._t("LLM bull/bear 同时强（内部高冲突）：持仓减半，等待证据收敛",
+                                 "LLM is strongly bullish and bearish at once (high internal conflict): halving the position until the evidence converges")
             elif quant_long and quant_strength >= 0.6:
                 d.final_signal, d.final_strength = "buy", 0.5
-                d.explanation = "量化强但 LLM 高度不确定：仅允许半仓试探"
+                d.explanation = self._t("量化强但 LLM 高度不确定：仅允许半仓试探",
+                                 "Quant is strong but the LLM is highly uncertain: a half-size probe only")
             else:
                 d.final_signal = "no_action"
-                d.explanation = "LLM 内部高冲突且量化不强：观望"
+                d.explanation = self._t("LLM 内部高冲突且量化不强：观望",
+                                 "High internal LLM conflict and a weak quant signal: stand aside")
             return d
 
         if llm.low_evidence:
@@ -324,14 +338,19 @@ class FusionPolicy:
             # cannot confirm either — proceed at reduced size
             if holding:
                 d.final_signal, d.final_strength = ("reduce", 0.5) if quant_short else ("hold", 1.0)
-                d.explanation = "LLM 证据不足（citation/selection 低）：持仓按量化规则管理"
+                d.explanation = self._t("LLM 证据不足（citation/selection 低）：持仓按量化规则管理",
+                                 "Insufficient LLM evidence (low citation/selection): manage the position by quant rules")
             elif quant_long and quant_strength >= 0.6:
                 d.final_signal, d.final_strength = "buy", 0.75
-                d.explanation = (f"LLM 证据薄弱（citation-damped conf {llm.confidence:.2f}）"
-                                 "，不足以确认或否决：按量化信号 75% 目标执行")
+                d.explanation = self._t(
+                    f"LLM 证据薄弱（citation-damped conf {llm.confidence:.2f}）"
+                    f"，不足以确认或否决：按量化信号 75% 目标执行",
+                    f"Weak LLM evidence (citation-damped conf {llm.confidence:.2f}) — enough to neither "
+                    f"confirm nor veto: execute the quant signal at 75% of target")
             else:
                 d.final_signal = "no_action"
-                d.explanation = "证据不足且量化不强：观望"
+                d.explanation = self._t("证据不足且量化不强：观望",
+                                 "Insufficient evidence and a weak quant signal: stand aside")
             return d
 
         llm_bull = llm.direction in BULLISH_DIRS
@@ -342,22 +361,32 @@ class FusionPolicy:
             strong_bear = llm.direction == ResearchDirection.STRONGLY_BEARISH or llm.risk_score >= 0.5
             if holding:
                 d.final_signal, d.final_strength = ("sell", 0.0) if strong_bear else ("reduce", 0.5)
-                d.explanation = f"持仓冲突：量化看多但 LLM 看空（risk {llm.risk_score:.2f}）→ {'清仓' if strong_bear else '减半'}"
+                d.explanation = self._t(
+                    f"持仓冲突：量化看多但 LLM 看空（risk {llm.risk_score:.2f}）"
+                    f"→ {'清仓' if strong_bear else '减半'}",
+                    f"Conflict on a held name: quant bullish but LLM bearish (risk {llm.risk_score:.2f})"
+                    f" → {'exit' if strong_bear else 'halve'}")
             else:
                 d.final_signal = "no_action" if strong_bear else "buy"
                 d.final_strength = 0.0 if strong_bear else 0.5
-                d.explanation = ("量化看多 vs LLM 强看空：否决建仓（NO_ACTION）" if strong_bear
-                                 else "量化看多 vs LLM 温和看空：半仓，冲突已记录")
+                d.explanation = (
+                    self._t("量化看多 vs LLM 强看空：否决建仓（NO_ACTION）",
+                            "Quant bullish vs. strongly bearish LLM: entry vetoed (NO_ACTION)")
+                    if strong_bear else
+                    self._t("量化看多 vs LLM 温和看空：半仓，冲突已记录",
+                            "Quant bullish vs. mildly bearish LLM: half size, conflict recorded"))
             return d
 
         if quant_short and llm_bull:
             d.conflict_state = ConflictState.QUANT_BEAR_LLM_BULL
             if holding:
                 d.final_signal, d.final_strength = "reduce", 0.5
-                d.explanation = "量化排名恶化但 LLM 看多：减半而非清仓，等待下一轮证据"
+                d.explanation = self._t("量化排名恶化但 LLM 看多：减半而非清仓，等待下一轮证据",
+                                 "Quant rank deteriorated but the LLM is bullish: halve rather than exit, pending the next round of evidence")
             else:
                 d.final_signal = "no_action"
-                d.explanation = "量化弱但 LLM 看多：v1 策略不允许 LLM 单独开仓（观望/watch）"
+                d.explanation = self._t("量化弱但 LLM 看多：v1 策略不允许 LLM 单独开仓（观望/watch）",
+                                 "Quant is weak while the LLM is bullish: the v1 policy never lets the LLM open a position alone (watch)")
             return d
 
         if quant_long and llm_bull:
@@ -365,30 +394,38 @@ class FusionPolicy:
                       and llm.confidence >= 0.5 and llm.conflict_score < 0.3)
             d.final_signal = "buy" if not holding else "hold"
             d.final_strength = 1.15 if strong else 1.0
-            d.explanation = (f"CONFIRMED：量化 {quant_strength:.2f} + LLM {llm.direction.value}"
-                             f"（conf {llm.confidence:.2f}，conflict {llm.conflict_score:.2f}）"
-                             + ("，强确认放大 15%" if strong else ""))
+            d.explanation = self._t(
+                f"CONFIRMED：量化 {quant_strength:.2f} + LLM {llm.direction.value}"
+                f"（conf {llm.confidence:.2f}，conflict {llm.conflict_score:.2f}）"
+                + ("，强确认放大 15%" if strong else ""),
+                f"CONFIRMED: quant {quant_strength:.2f} + LLM {llm.direction.value} "
+                f"(conf {llm.confidence:.2f}, conflict {llm.conflict_score:.2f})"
+                + (", strong confirmation scaled up 15%" if strong else ""))
             return d
 
         if quant_long and llm.direction == ResearchDirection.NEUTRAL:
             d.final_signal = "buy" if not holding else "hold"
             d.final_strength = 0.85
-            d.explanation = "量化看多，LLM 中性（无实质性反证）：85% 目标执行"
+            d.explanation = self._t("量化看多，LLM 中性（无实质性反证）：85% 目标执行",
+                                 "Quant bullish, LLM neutral (no material counter-evidence): execute at 85% of target")
             return d
 
         if not quant_long and llm_bull:
             # LLM alone cannot open a large position (第十四条)
             d.final_signal, d.final_strength = "watch", 0.0
-            d.explanation = "LLM 看多但量化未确认：加入观察，不开仓"
+            d.explanation = self._t("LLM 看多但量化未确认：加入观察，不开仓",
+                                 "LLM bullish but unconfirmed by quant: add to watch, do not open")
             return d
 
         if holding and (quant_short or llm_bear):
             d.final_signal, d.final_strength = "reduce", 0.5
-            d.explanation = "持仓的量化或 LLM 观点转弱：减半"
+            d.explanation = self._t("持仓的量化或 LLM 观点转弱：减半",
+                                 "Quant or LLM view on the held name weakened: halve")
             return d
 
         d.final_signal = "hold" if holding else "no_action"
-        d.explanation = "量化与 LLM 均无足够强的方向信号"
+        d.explanation = self._t("量化与 LLM 均无足够强的方向信号",
+                                 "Neither quant nor LLM offers a strong enough directional signal")
         return d
 
 

@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+from noalpha.i18n import DEFAULT_LANG, t
 from noalpha.market.fx import get_rate
 from noalpha.market.gateway import market_gateway
 from noalpha.market.instruments import parse_secid
@@ -228,9 +229,13 @@ class ResearchOutcome:
 class DecisionEngine:
     """Deterministic, evidence-based decision logic (stage 1 + stage 2)."""
 
-    def __init__(self, profile: dict[str, float]) -> None:
+    def __init__(self, profile: dict[str, float], lang: str = DEFAULT_LANG) -> None:
         self.profile = profile
-        self.agents = TradingAgentsOrchestrator(profile)
+        self.lang = lang
+        self.agents = TradingAgentsOrchestrator(profile, lang)
+
+    def _t(self, zh: str, en: str) -> str:
+        return t(self.lang, zh, en)
 
     def scan_universe(self, universe: list[dict[str, Any]], feed: MarketFeed) -> tuple[list[Candidate], list[str]]:
         candidates: list[Candidate] = []
@@ -274,38 +279,56 @@ class DecisionEngine:
 
         bull, bear, risks = [], [], []
         if s.get("mom_5d", 0) > 0.02:
-            bull.append(f"5日动量 {s['mom_5d']:+.2%}（{ev('mom5', f'5-day momentum {s['mom_5d']:+.2%}', s['mom_5d'])}）")
+            eid = ev("mom5", f"5-day momentum {s['mom_5d']:+.2%}", s["mom_5d"])
+            bull.append(self._t(f"5日动量 {s['mom_5d']:+.2%}（{eid}）", f"5-day momentum {s['mom_5d']:+.2%} ({eid})"))
         elif s.get("mom_5d", 0) < -0.02:
-            bear.append(f"5日动量 {s['mom_5d']:+.2%}（{ev('mom5', f'5-day momentum {s['mom_5d']:+.2%}', s['mom_5d'])}）")
+            eid = ev("mom5", f"5-day momentum {s['mom_5d']:+.2%}", s["mom_5d"])
+            bear.append(self._t(f"5日动量 {s['mom_5d']:+.2%}（{eid}）", f"5-day momentum {s['mom_5d']:+.2%} ({eid})"))
         if s.get("mom_20d", 0) > 0.05:
-            bull.append(f"20日动量 {s['mom_20d']:+.2%}（{ev('mom20', f'20-day momentum {s['mom_20d']:+.2%}', s['mom_20d'])}）")
+            eid = ev("mom20", f"20-day momentum {s['mom_20d']:+.2%}", s["mom_20d"])
+            bull.append(self._t(f"20日动量 {s['mom_20d']:+.2%}（{eid}）", f"20-day momentum {s['mom_20d']:+.2%} ({eid})"))
         elif s.get("mom_20d", 0) < -0.05:
-            bear.append(f"20日动量 {s['mom_20d']:+.2%}（{ev('mom20', f'20-day momentum {s['mom_20d']:+.2%}', s['mom_20d'])}）")
+            eid = ev("mom20", f"20-day momentum {s['mom_20d']:+.2%}", s["mom_20d"])
+            bear.append(self._t(f"20日动量 {s['mom_20d']:+.2%}（{eid}）", f"20-day momentum {s['mom_20d']:+.2%} ({eid})"))
         if s.get("volume_ratio", 0) >= 2.0:
-            direction = "放量上行" if s.get("day_change_pct", 0) > 0 else "放量下行"
-            (bull if s.get("day_change_pct", 0) > 0 else bear).append(
-                f"{direction}，量比 {s['volume_ratio']:.1f}x（{ev('vol', f'volume ratio {s['volume_ratio']:.1f}x', s['volume_ratio'])}）")
+            up = s.get("day_change_pct", 0) > 0
+            direction = self._t("放量上行" if up else "放量下行",
+                                "high-volume advance" if up else "high-volume decline")
+            eid = ev("vol", f"volume ratio {s['volume_ratio']:.1f}x", s["volume_ratio"])
+            (bull if up else bear).append(self._t(
+                f"{direction}，量比 {s['volume_ratio']:.1f}x（{eid}）",
+                f"{direction}, volume ratio {s['volume_ratio']:.1f}x ({eid})"))
         if s.get("price_vs_ma20") is not None:
-            side = "上方" if s.get("price_vs_ma20", 0) >= 0 else "下方"
-            (bull if s.get("price_vs_ma20", 0) >= 0 else bear).append(
-                f"价格位于 20 日均线{side} {abs(s.get('price_vs_ma20', 0)):.2%}"
-                f"（{ev('ma20', f'price vs MA20 {s.get('price_vs_ma20', 0):+.2%}', s.get('price_vs_ma20', 0))}）")
+            above = s.get("price_vs_ma20", 0) >= 0
+            side = self._t("上方" if above else "下方", "above" if above else "below")
+            eid = ev("ma20", f"price vs MA20 {s.get('price_vs_ma20', 0):+.2%}", s.get("price_vs_ma20", 0))
+            (bull if above else bear).append(self._t(
+                f"价格位于 20 日均线{side} {abs(s.get('price_vs_ma20', 0)):.2%}（{eid}）",
+                f"price {side} the 20-day MA by {abs(s.get('price_vs_ma20', 0)):.2%} ({eid})"))
         vol = s.get("volatility_20d", 0)
         if vol > 0.03:
-            risks.append(f"20日波动率偏高 {vol:.2%}")
-        risks.append("动量策略在震荡市中失效风险")
+            risks.append(self._t(f"20日波动率偏高 {vol:.2%}", f"elevated 20-day volatility {vol:.2%}"))
+        risks.append(self._t("动量策略在震荡市中失效风险",
+                             "momentum strategies break down in range-bound markets"))
 
         confidence = min(0.9, max(0.1, candidate.score * (0.85 if vol > 0.03 else 1.0)))
-        thesis = (
+        thesis = self._t(
             f"{candidate.name}({candidate.symbol}) 综合动量得分 {candidate.score:.2f}："
             f"5日 {s.get('mom_5d', 0):+.2%}、20日 {s.get('mom_20d', 0):+.2%}、"
             f"量比 {s.get('volume_ratio', 0):.1f}x。基于真实日K与实时报价的确定性信号研究"
-            f"（非LLM，research_mode=deterministic）。"
+            f"（非LLM，research_mode=deterministic）。",
+            f"{candidate.name} ({candidate.symbol}) composite momentum score {candidate.score:.2f}: "
+            f"5-day {s.get('mom_5d', 0):+.2%}, 20-day {s.get('mom_20d', 0):+.2%}, "
+            f"volume ratio {s.get('volume_ratio', 0):.1f}x. Deterministic signal research over real "
+            f"daily bars and live quotes (not an LLM; research_mode=deterministic).",
         )
         invalidation = [
-            "收盘价跌破20日均线且5日动量转负",
-            f"持仓亏损超过止损线 {self.profile['stop_loss']:.0%}",
-            "放量下跌（量比≥2且当日跌幅≥3%）",
+            self._t("收盘价跌破20日均线且5日动量转负",
+                    "close breaks below the 20-day MA and 5-day momentum turns negative"),
+            self._t(f"持仓亏损超过止损线 {self.profile['stop_loss']:.0%}",
+                    f"position loss exceeds the {self.profile['stop_loss']:.0%} stop"),
+            self._t("放量下跌（量比≥2且当日跌幅≥3%）",
+                    "high-volume decline (volume ratio ≥2 and day change ≤ −3%)"),
         ]
         agent_report = self.agents.run(
             symbol=candidate.symbol,
@@ -334,39 +357,56 @@ class DecisionEngine:
         # ── explainability ──
         n_bull = len(research.bull_case)
         n_bear = len(research.bear_case)
-        ranking_note = f"本轮 {len(research.evidence)} 条信号证据，{n_bull} 利多 {n_bear} 利空"
+        ranking_note = self._t(
+            f"本轮 {len(research.evidence)} 条信号证据，{n_bull} 利多 {n_bear} 利空",
+            f"{len(research.evidence)} signal evidence items this cycle: {n_bull} bullish, {n_bear} bearish")
 
         agent_report = research.agent_report
         trader_plan = agent_report.trader_plan if agent_report else None
         debate = agent_report.debate if agent_report else None
         agent_summary = (
-            f"TradingAgents 角色链路完成：多空共识 {debate.consensus}、"
-            f"冲突 {debate.conflict_level:.2f}；交易员建议 {trader_plan.action_hint}。"
+            self._t(
+                f"TradingAgents 角色链路完成：多空共识 {debate.consensus}、"
+                f"冲突 {debate.conflict_level:.2f}；交易员建议 {trader_plan.action_hint}。",
+                f"TradingAgents role chain completed: bull/bear consensus {debate.consensus}, "
+                f"conflict {debate.conflict_level:.2f}; trader suggests {trader_plan.action_hint}.")
             if debate and trader_plan else
-            "TradingAgents 角色链路不可用，回退确定性信号研究。"
+            self._t("TradingAgents 角色链路不可用，回退确定性信号研究。",
+                    "TradingAgents role chain unavailable; fell back to deterministic signal research.")
         )
-        decision_summary = (
+        decision_summary = self._t(
             f"AI 选择买入 {candidate.name}({candidate.symbol})。"
             f"短中期动量信号共振——5日 {candidate.signals.get('mom_5d', 0):+.2%}、"
             f"20日 {candidate.signals.get('mom_20d', 0):+.2%}，"
             f"综合候选评分 {candidate.score:.2f}；"
             f"{agent_summary}"
-            f" 当前未伪造基本面/新闻/情绪数据，最终仓位仍受外部硬风控约束。"
+            f" 当前未伪造基本面/新闻/情绪数据，最终仓位仍受外部硬风控约束。",
+            f"The AI chose to buy {candidate.name} ({candidate.symbol}). "
+            f"Short- and medium-term momentum agree — 5-day {candidate.signals.get('mom_5d', 0):+.2%}, "
+            f"20-day {candidate.signals.get('mom_20d', 0):+.2%}, "
+            f"composite candidate score {candidate.score:.2f}. "
+            f"{agent_summary}"
+            f" No fundamental, news or sentiment data was fabricated, and the final size remains "
+            f"subject to external hard risk limits.",
         )
 
         catalysts: list[dict[str, Any]] = []
         if candidate.signals.get("mom_5d", 0) > 0.02:
             catalysts.append({
-                "title": "短期动量增强",
-                "description": f"5日动量 {candidate.signals['mom_5d']:+.2%}，显著跑赢基准",
+                "title": self._t("短期动量增强", "Short-term momentum strengthening"),
+                "description": self._t(
+                    f"5日动量 {candidate.signals['mom_5d']:+.2%}，显著跑赢基准",
+                    f"5-day momentum {candidate.signals['mom_5d']:+.2%}, clearly ahead of the benchmark"),
                 "evidence_ids": research.evidence_ids()[:3],
                 "expected_time_horizon": "5-15 trading days",
                 "confidence": min(0.85, 0.55 + abs(candidate.signals["mom_5d"])),
             })
         if candidate.signals.get("mom_20d", 0) > 0.05:
             catalysts.append({
-                "title": "中期趋势延续",
-                "description": f"20日动量 {candidate.signals['mom_20d']:+.2%}，趋势同步确认",
+                "title": self._t("中期趋势延续", "Medium-term trend continuation"),
+                "description": self._t(
+                    f"20日动量 {candidate.signals['mom_20d']:+.2%}，趋势同步确认",
+                    f"20-day momentum {candidate.signals['mom_20d']:+.2%}, trend confirmed in sync"),
                 "evidence_ids": research.evidence_ids()[2:5],
                 "expected_time_horizon": "15-40 trading days",
                 "confidence": min(0.80, 0.55 + abs(candidate.signals["mom_20d"])),
@@ -381,15 +421,24 @@ class DecisionEngine:
         }
 
         positive_factors = [
-            f"5日动量 {candidate.signals.get('mom_5d', 0):+.2%}" if candidate.signals.get("mom_5d", 0) > 0.02 else None,
-            f"20日动量 {candidate.signals.get('mom_20d', 0):+.2%}" if candidate.signals.get("mom_20d", 0) > 0.05 else None,
-            f"候选评分 {candidate.score:.2f} 超过阈值 {self.profile['buy_score_threshold']:.2f}",
+            self._t(f"5日动量 {candidate.signals.get('mom_5d', 0):+.2%}",
+                    f"5-day momentum {candidate.signals.get('mom_5d', 0):+.2%}")
+            if candidate.signals.get("mom_5d", 0) > 0.02 else None,
+            self._t(f"20日动量 {candidate.signals.get('mom_20d', 0):+.2%}",
+                    f"20-day momentum {candidate.signals.get('mom_20d', 0):+.2%}")
+            if candidate.signals.get("mom_20d", 0) > 0.05 else None,
+            self._t(f"候选评分 {candidate.score:.2f} 超过阈值 {self.profile['buy_score_threshold']:.2f}",
+                    f"candidate score {candidate.score:.2f} clears the {self.profile['buy_score_threshold']:.2f} threshold"),
         ]
         negative_factors = [
-            "当前无基本面催化证据（技术信号策略固有局限）",
-            f"波动率 {candidate.signals.get('volatility_20d', 0):.2%}" if candidate.signals.get("volatility_20d", 0) > 0.03 else None,
-            "缺乏跨来源交叉验证（仅有行情数据）",
-            n_bear > 0 and f"存在 {n_bear} 条空头信号" or None,
+            self._t("当前无基本面催化证据（技术信号策略固有局限）",
+                    "no fundamental catalyst evidence (an inherent limit of a technical-signal strategy)"),
+            self._t(f"波动率 {candidate.signals.get('volatility_20d', 0):.2%}",
+                    f"volatility {candidate.signals.get('volatility_20d', 0):.2%}")
+            if candidate.signals.get("volatility_20d", 0) > 0.03 else None,
+            self._t("缺乏跨来源交叉验证（仅有行情数据）",
+                    "no cross-source corroboration (market data only)"),
+            (self._t(f"存在 {n_bear} 条空头信号", f"{n_bear} bearish signal(s) present") if n_bear > 0 else None),
         ]
 
         return TradeProposal(
@@ -398,18 +447,27 @@ class DecisionEngine:
             target_weight=round(target, 4),
             rationale=TradeRationale(
                 thesis=research.thesis,
-                signal_reason=(
+                signal_reason=self._t(
                     f"综合动量得分 {candidate.score:.2f}："
                     f"5日 {candidate.signals.get('mom_5d', 0):+.2%}、"
                     f"20日 {candidate.signals.get('mom_20d', 0):+.2%}、"
-                    f"量比 {candidate.signals.get('volume_ratio', 0):.1f}x"
+                    f"量比 {candidate.signals.get('volume_ratio', 0):.1f}x",
+                    f"composite momentum score {candidate.score:.2f}: "
+                    f"5-day {candidate.signals.get('mom_5d', 0):+.2%}, "
+                    f"20-day {candidate.signals.get('mom_20d', 0):+.2%}, "
+                    f"volume ratio {candidate.signals.get('volume_ratio', 0):.1f}x",
                 ),
                 decision_summary=decision_summary,
-                why_this_instrument=(
+                why_this_instrument=self._t(
                     f"{candidate.name}({candidate.symbol}) 在本轮扫描中排名靠前"
                     f"（评分 {candidate.score:.2f}，阈值 {self.profile['buy_score_threshold']:.2f}）。"
                     f"{ranking_note}。"
-                    f"当前无持仓冲突，满足 TradingAgents 交易员准入和外部风控前置条件。"
+                    f"当前无持仓冲突，满足 TradingAgents 交易员准入和外部风控前置条件。",
+                    f"{candidate.name} ({candidate.symbol}) ranked near the top of this scan "
+                    f"(score {candidate.score:.2f} vs threshold {self.profile['buy_score_threshold']:.2f}). "
+                    f"{ranking_note}. "
+                    f"No conflicting position exists, and it clears the TradingAgents trader gate and "
+                    f"the external risk pre-conditions.",
                 ),
                 why_now=(trader_plan.why_now if trader_plan else [c.reason for c in [candidate] if c.reason]),
                 catalysts=catalysts,
@@ -455,32 +513,46 @@ class DecisionEngine:
         if ret <= self.profile["stop_loss"]:
             return exit_proposal(
                 TradeAction.CLOSE, 0.0, ExitReason.STOP_LOSS,
-                f"止损触发：持仓收益 {ret:+.2%} ≤ 止损线 {self.profile['stop_loss']:.0%}", 0.9,
+                self._t(f"止损触发：持仓收益 {ret:+.2%} ≤ 止损线 {self.profile['stop_loss']:.0%}",
+                        f"Stop-loss hit: position return {ret:+.2%} ≤ stop at {self.profile['stop_loss']:.0%}"), 0.9,
             ), "stop_loss"
         if ret >= self.profile["take_profit"]:
             return exit_proposal(
                 TradeAction.CLOSE, 0.0, ExitReason.TAKE_PROFIT,
-                f"止盈触发：持仓收益 {ret:+.2%} ≥ 止盈线 {self.profile['take_profit']:.0%}", 0.85,
+                self._t(f"止盈触发：持仓收益 {ret:+.2%} ≥ 止盈线 {self.profile['take_profit']:.0%}",
+                        f"Take-profit hit: position return {ret:+.2%} ≥ target at {self.profile['take_profit']:.0%}"), 0.85,
             ), "take_profit"
         # New negative evidence: heavy-volume selloff
         if signals.get("volume_ratio", 0) >= 2.0 and signals.get("day_change_pct", 0) <= -3.0:
             return exit_proposal(
                 TradeAction.REDUCE, 0.5, ExitReason.NEW_NEGATIVE_EVIDENCE,
-                f"新负面证据：放量下跌（量比 {signals.get('volume_ratio', 0):.1f}x，"
-                f"当日 {signals.get('day_change_pct', 0):+.1f}%），减仓一半", 0.75,
+                self._t(
+                    f"新负面证据：放量下跌（量比 {signals.get('volume_ratio', 0):.1f}x，"
+                    f"当日 {signals.get('day_change_pct', 0):+.1f}%），减仓一半",
+                    f"New negative evidence: high-volume decline (volume ratio "
+                    f"{signals.get('volume_ratio', 0):.1f}x, day {signals.get('day_change_pct', 0):+.1f}%); "
+                    f"halving the position"), 0.75,
             ), "negative_evidence"
         # Thesis invalidation: momentum thesis broken
         if signals.get("price_vs_ma20", 0) < -0.02 and signals.get("mom_5d", 0) < -0.03:
             return exit_proposal(
                 TradeAction.CLOSE, 0.0, ExitReason.THESIS_INVALIDATED,
-                f"论点失效：价格跌破20日均线 {signals.get('price_vs_ma20', 0):+.2%} "
-                f"且5日动量 {signals.get('mom_5d', 0):+.2%} 转负，动量论点不再成立", 0.8,
+                self._t(
+                    f"论点失效：价格跌破20日均线 {signals.get('price_vs_ma20', 0):+.2%} "
+                    f"且5日动量 {signals.get('mom_5d', 0):+.2%} 转负，动量论点不再成立",
+                    f"Thesis invalidated: price broke below the 20-day MA "
+                    f"({signals.get('price_vs_ma20', 0):+.2%}) and 5-day momentum turned negative "
+                    f"({signals.get('mom_5d', 0):+.2%}); the momentum thesis no longer holds"), 0.8,
             ), "thesis_invalidated"
-        hold_reason = (
+        hold_reason = self._t(
             f"{symbol} 继续持有：收益率 {ret:+.2%}，"
             f"未触发止损 {self.profile['stop_loss']:.0%}/止盈 {self.profile['take_profit']:.0%}，"
-            f"动量论点未失效且无新负面证据。"
-        ) if ret is not None else f"{symbol} 持仓维持，当前无卖出信号。"
+            f"动量论点未失效且无新负面证据。",
+            f"{symbol} still held: return {ret:+.2%}, neither the {self.profile['stop_loss']:.0%} stop "
+            f"nor the {self.profile['take_profit']:.0%} target was hit, the momentum thesis stands and "
+            f"no new negative evidence appeared.",
+        ) if ret is not None else self._t(
+            f"{symbol} 持仓维持，当前无卖出信号。", f"{symbol} position maintained; no sell signal.")
         return None, hold_reason
 
 
@@ -500,7 +572,7 @@ class AutonomousTradingLoop:
         profile["max_position_weight"] = session.max_position_weight or profile["max_position_weight"]
         profile["max_daily_loss_pct"] = session.max_daily_loss_pct or profile["max_daily_loss_pct"]
         self.profile = profile
-        self.engine = DecisionEngine(profile)
+        self.engine = DecisionEngine(profile, session.lang)
         self.risk = PreTradeRiskEngine(
             max_position_weight=profile["max_position_weight"],
             max_daily_loss_pct=profile["max_daily_loss_pct"],
@@ -516,7 +588,7 @@ class AutonomousTradingLoop:
         self.quant_result: InferenceResult | None = None
         # ── Phase Q5: real LLM research fusion + forward feature accumulation ──
         self.llm_feature_store = LLMFeatureStore()
-        self.fusion_policy = FusionPolicy()
+        self.fusion_policy = FusionPolicy(session.lang)
         self.trading_research: TradingResearchService | None = None
         self.llm_init_error = ""
         if session.research_mode == "llm":
@@ -588,6 +660,9 @@ class AutonomousTradingLoop:
 
     # ── event helper ──
 
+    def _t(self, zh: str, en: str) -> str:
+        return t(self.session.lang, zh, en)
+
     def _emit(self, event_type: str, message: str, secid: str = "", symbol: str = "",
               payload: dict[str, Any] | None = None) -> None:
         self.store.add_event(DecisionEvent(
@@ -644,12 +719,17 @@ class AutonomousTradingLoop:
         universe = self._universe()
         self.current_stage = "scan"
         self.current_target = ""
-        self._emit("scan", f"扫描 {len(universe)} 只标的（universe={session.universe}，"
-                           f"markets={','.join(session.allowed_markets)}）",
+        self._emit("scan", self._t(
+            f"扫描 {len(universe)} 只标的（universe={session.universe}，"
+            f"markets={','.join(session.allowed_markets)}）",
+            f"Scanned {len(universe)} instruments (universe={session.universe}, "
+            f"markets={','.join(session.allowed_markets)})"),
                    payload={"universe_size": len(universe)})
 
         if not universe:
-            self._emit("no_action", "候选池为空：watchlist 中没有属于允许市场的启用标的",
+            self._emit("no_action", self._t(
+                "候选池为空：watchlist 中没有属于允许市场的启用标的",
+                "Candidate pool empty: no enabled watchlist instrument belongs to an allowed market"),
                        payload={"reason": "empty_universe"})
             summary["no_actions"].append("empty_universe")
             self._finish_cycle(summary)
@@ -658,7 +738,7 @@ class AutonomousTradingLoop:
         # Stage 1: cheap scan
         candidates, skipped = self.engine.scan_universe(universe, self.feed)
         for msg in skipped:
-            self._emit("scan", f"跳过 {msg}", payload={"skipped": msg})
+            self._emit("scan", self._t(f"跳过 {msg}", f"Skipped {msg}"), payload={"skipped": msg})
         for c in candidates:
             self._secid_by_symbol[c.symbol] = c.secid
 
@@ -674,14 +754,16 @@ class AutonomousTradingLoop:
         # System Truth even for a restored loop (no "no inference has run yet"
         # while the truth bar says HEALTHY).
         try:
-            self._emit("quant_full", "量化推理快照", payload=quant.to_dict())
+            self._emit("quant_full", self._t("量化推理快照", "Quant inference snapshot"),
+                       payload=quant.to_dict())
         except Exception:
             logger.exception("quant snapshot persist failed")
         signal_by_symbol = {s.symbol: s for s in quant.signals}
         quant_ok = not quant.error and bool(quant.predictions)
         self.effective_mode = self._compute_mode(quant_ok=quant_ok)
         summary["effective_mode"] = self.effective_mode
-        self._emit("mode", f"本轮有效决策模式：{self.effective_mode}",
+        self._emit("mode", self._t(f"本轮有效决策模式：{self.effective_mode}",
+                                   f"Effective decision mode this cycle: {self.effective_mode}"),
                    payload={"effective_mode": self.effective_mode,
                             "quant_available": quant_ok,
                             "quant_error": quant.error,
@@ -689,16 +771,22 @@ class AutonomousTradingLoop:
                             "llm_active": self.trading_research is not None,
                             "llm_init_error": self.llm_init_error})
         if quant.error:
-            self._emit("quant", f"量化推理不可用：{quant.error}（回退启发式评分）",
+            self._emit("quant", self._t(
+                f"量化推理不可用：{quant.error}（回退启发式评分）",
+                f"Quant inference unavailable: {quant.error} (fell back to heuristic scoring)"),
                        payload={"error": quant.error, "skipped": quant.skipped[:10]})
         else:
             top = [{"symbol": p.symbol, "rank": p.predicted_rank,
                     "predicted_return": round(p.predicted_return or 0.0, 5),
                     "probability_up": p.probability_up}
                    for p in quant.predictions[:5]]
-            self._emit("quant", f"量化推理完成：{quant.model.get('display')} 对 "
-                                f"{len(quant.predictions)} 只标的横截面排名"
-                                f"（horizon {quant.model.get('horizon_days')}d）",
+            self._emit("quant", self._t(
+                f"量化推理完成：{quant.model.get('display')} 对 "
+                f"{len(quant.predictions)} 只标的横截面排名"
+                f"（horizon {quant.model.get('horizon_days')}d）",
+                f"Quant inference complete: {quant.model.get('display')} ranked "
+                f"{len(quant.predictions)} instruments cross-sectionally "
+                f"(horizon {quant.model.get('horizon_days')}d)"),
                        payload={"model": quant.model, "top_predictions": top,
                                 "universe_size": len(quant.predictions),
                                 "skipped": quant.skipped[:10],
@@ -740,10 +828,15 @@ class AutonomousTradingLoop:
                         action=TradeAction.CLOSE if close_out else TradeAction.REDUCE,
                         target_weight=0.0 if close_out else 0.5,
                         rationale=TradeRationale(
-                            thesis=(f"量化排名恶化：{symbol} 当前横截面排名 "
-                                    f"{pred.predicted_rank}/{pred.universe_size}（后1/3），"
-                                    f"预期{pred.horizon_days}日超额收益转负 "
-                                    f"{pred.predicted_return:+.2%}，减仓一半"),
+                            thesis=self._t(
+                                f"量化排名恶化：{symbol} 当前横截面排名 "
+                                f"{pred.predicted_rank}/{pred.universe_size}（后1/3），"
+                                f"预期{pred.horizon_days}日超额收益转负 "
+                                f"{pred.predicted_return:+.2%}，减仓一半",
+                                f"Quant rank deteriorated: {symbol} now ranks "
+                                f"{pred.predicted_rank}/{pred.universe_size} (bottom third), with the "
+                                f"predicted {pred.horizon_days}-day excess return turning negative at "
+                                f"{pred.predicted_return:+.2%}; halving the position"),
                             confidence=qsig.confidence,
                             quant_view={"rank": pred.predicted_rank,
                                         "universe_size": pred.universe_size,
@@ -760,7 +853,8 @@ class AutonomousTradingLoop:
                 proposal.decision_mode = DecisionMode.DETERMINISTIC_SIGNAL.value
             if proposal is None:
                 position.hold_rationale = verdict  # persist why we hold
-                self._emit("position", f"{symbol} 持仓检查：{verdict}", symbol=symbol,
+                self._emit("position", self._t(f"{symbol} 持仓检查：{verdict}",
+                                               f"{symbol} position check: {verdict}"), symbol=symbol,
                            payload={"verdict": verdict, "unrealized_pnl": position.unrealized_pnl,
                                     "quant_rank": qsig.strength if qsig else None})
                 continue
@@ -806,8 +900,11 @@ class AutonomousTradingLoop:
                     * self.broker.account.equity
                 acct_price, _ = self._account_price(cand.quote)
                 if acct_price > 0 and headroom_notional < lot * acct_price:
-                    self._emit("no_action", f"{cand.symbol} 已持仓 {existing_weight:.1%}，"
-                                            f"剩余额度不足一手（{lot} 股），跳过加仓",
+                    self._emit("no_action", self._t(
+                        f"{cand.symbol} 已持仓 {existing_weight:.1%}，"
+                        f"剩余额度不足一手（{lot} 股），跳过加仓",
+                        f"{cand.symbol} already held at {existing_weight:.1%}; remaining headroom is "
+                        f"under one lot ({lot} shares), so no add-on"),
                                secid=cand.secid, symbol=cand.symbol,
                                payload={"reason": "position_near_cap",
                                         "existing_weight": existing_weight,
@@ -817,12 +914,17 @@ class AutonomousTradingLoop:
                     continue
             tradable, freshness = self._tradable(cand.quote)
             if not tradable:
-                self._emit("no_action", f"{cand.symbol} 达到候选阈值(score={cand.score:.2f})但市场不可交易"
-                                        f"（freshness={freshness}）", secid=cand.secid, symbol=cand.symbol,
+                self._emit("no_action", self._t(
+                    f"{cand.symbol} 达到候选阈值(score={cand.score:.2f})但市场不可交易"
+                    f"（freshness={freshness}）",
+                    f"{cand.symbol} cleared the candidate threshold (score={cand.score:.2f}) but the "
+                    f"market is not tradable (freshness={freshness})"),
+                           secid=cand.secid, symbol=cand.symbol,
                            payload={"reason": "market_not_tradable", "freshness": freshness, "score": cand.score})
                 summary["no_actions"].append(f"{cand.symbol}:market_not_tradable")
                 continue
-            self._emit("candidate", f"{cand.symbol} 入选研究候选：{cand.reason}",
+            self._emit("candidate", self._t(f"{cand.symbol} 入选研究候选：{cand.reason}",
+                                            f"{cand.symbol} selected for research: {cand.reason}"),
                        secid=cand.secid, symbol=cand.symbol,
                        payload={"score": cand.score, "signals": cand.signals})
             researched += 1
@@ -830,8 +932,10 @@ class AutonomousTradingLoop:
 
             # ── deterministic research (Arm B baseline, always computed) ──
             research = self.engine.research(cand, self.feed)
-            self._emit("research", f"{cand.symbol} 研究完成：confidence={research.confidence:.2f}"
-                                   f"（deterministic 信号研究）",
+            self._emit("research", self._t(
+                f"{cand.symbol} 研究完成：confidence={research.confidence:.2f}（deterministic 信号研究）",
+                f"{cand.symbol} research complete: confidence={research.confidence:.2f} "
+                f"(deterministic signal research)"),
                        secid=cand.secid, symbol=cand.symbol,
                        payload={"thesis": research.thesis, "bull_case": research.bull_case,
                                 "bear_case": research.bear_case, "risks": research.risks,
@@ -839,13 +943,19 @@ class AutonomousTradingLoop:
                                 "research_mode": research.research_mode})
             if research.agent_report is not None:
                 agent_payload = research.agent_report.to_dict()
-                self._emit("agent", f"{cand.symbol} TradingAgents 角色链路完成："
-                                    f"{agent_payload.get('debate', {}).get('consensus', 'neutral')} → "
-                                    f"{agent_payload.get('trader_plan', {}).get('action_hint', 'no_action')}",
+                self._emit("agent", self._t(
+                    f"{cand.symbol} TradingAgents 角色链路完成："
+                    f"{agent_payload.get('debate', {}).get('consensus', 'neutral')} → "
+                    f"{agent_payload.get('trader_plan', {}).get('action_hint', 'no_action')}",
+                    f"{cand.symbol} TradingAgents role chain complete: "
+                    f"{agent_payload.get('debate', {}).get('consensus', 'neutral')} → "
+                    f"{agent_payload.get('trader_plan', {}).get('action_hint', 'no_action')}"),
                            secid=cand.secid, symbol=cand.symbol,
                            payload=agent_payload)
             if research.confidence < 0.5:
-                self._emit("no_action", f"{cand.symbol} 研究置信度 {research.confidence:.2f} < 0.5，放弃",
+                self._emit("no_action", self._t(
+                    f"{cand.symbol} 研究置信度 {research.confidence:.2f} < 0.5，放弃",
+                    f"{cand.symbol} research confidence {research.confidence:.2f} < 0.5; abandoned"),
                            secid=cand.secid, symbol=cand.symbol,
                            payload={"reason": "low_confidence", "confidence": research.confidence})
                 summary["no_actions"].append(f"{cand.symbol}:low_confidence")
@@ -879,10 +989,12 @@ class AutonomousTradingLoop:
                     self.shadow.llm_stats["vetoes"] += 1
                 else:
                     self.shadow.llm_stats["confirmations"] += 1
-                self._emit("fusion", f"{cand.symbol} 真LLM融合：{fusion.final_signal} "
-                                     f"(quant {fusion.quant_contribution.get('direction','?')}"
-                                     f" × LLM {llm_sig.direction.value if llm_sig else 'unavailable'}"
-                                     f" → {fusion.conflict_state.value})",
+                fusion_detail = (f"(quant {fusion.quant_contribution.get('direction','?')}"
+                                 f" × LLM {llm_sig.direction.value if llm_sig else 'unavailable'}"
+                                 f" → {fusion.conflict_state.value})")
+                self._emit("fusion", self._t(
+                    f"{cand.symbol} 真LLM融合：{fusion.final_signal} {fusion_detail}",
+                    f"{cand.symbol} real-LLM fusion: {fusion.final_signal} {fusion_detail}"),
                            secid=cand.secid, symbol=cand.symbol, payload=fusion.to_dict())
 
             # ── Arm B: deterministic ensemble (preserved baseline) ──
@@ -987,10 +1099,15 @@ class AutonomousTradingLoop:
                         action=TradeAction.CLOSE if is_close else TradeAction.REDUCE,
                         target_weight=0.0 if is_close else 0.5,
                         rationale=TradeRationale(
-                            thesis=(f"真LLM研究触发{fusion.final_signal}：{cand.symbol} "
-                                    f"quant {fusion.quant_contribution.get('direction','?')} × "
-                                    f"LLM {fusion.llm_contribution.get('direction','?')} → "
-                                    f"conflict {fusion.conflict_state.value}"),
+                            thesis=self._t(
+                                f"真LLM研究触发{fusion.final_signal}：{cand.symbol} "
+                                f"quant {fusion.quant_contribution.get('direction','?')} × "
+                                f"LLM {fusion.llm_contribution.get('direction','?')} → "
+                                f"conflict {fusion.conflict_state.value}",
+                                f"Real-LLM research triggered {fusion.final_signal}: {cand.symbol} "
+                                f"quant {fusion.quant_contribution.get('direction','?')} × "
+                                f"LLM {fusion.llm_contribution.get('direction','?')} → "
+                                f"conflict {fusion.conflict_state.value}"),
                             confidence=fusion.final_strength, quant_view=qv, llm_view=lv),
                         confidence=fusion.final_strength,
                         risk_result={"exit_reason": "llm_triggered"})
@@ -1036,18 +1153,21 @@ class AutonomousTradingLoop:
                 }
                 proposal.target_weight = round(pre_risk, 4)
             elif arm_b_decision.conflict is not None:
-                self._emit("conflict", f"{cand.symbol} Quant/Research 信号冲突："
-                                       f"{arm_b_decision.conflict.quant_view} vs "
-                                       f"{arm_b_decision.conflict.llm_view} → "
-                                       f"{arm_b_decision.conflict.resolution.value}",
+                conflict_detail = (f"{arm_b_decision.conflict.quant_view} vs "
+                                   f"{arm_b_decision.conflict.llm_view} → "
+                                   f"{arm_b_decision.conflict.resolution.value}")
+                self._emit("conflict", self._t(
+                    f"{cand.symbol} Quant/Research 信号冲突：{conflict_detail}",
+                    f"{cand.symbol} quant/research signal conflict: {conflict_detail}"),
                            secid=cand.secid, symbol=cand.symbol,
                            payload=arm_b_decision.conflict.to_dict())
                 summary["no_actions"].append(f"{cand.symbol}:signal_conflict")
                 continue
             else:
-                self._emit("no_action", f"{cand.symbol} 融合信号 "
-                                        f"{fusion.final_signal if fusion else arm_b_decision.action_hint}"
-                                        f"，未达买入阈值",
+                signal_name = fusion.final_signal if fusion else arm_b_decision.action_hint
+                self._emit("no_action", self._t(
+                    f"{cand.symbol} 融合信号 {signal_name}，未达买入阈值",
+                    f"{cand.symbol} fused signal {signal_name} did not clear the buy threshold"),
                            secid=cand.secid, symbol=cand.symbol,
                            payload={"reason": "fusion_no_buy",
                                     "fusion": fusion.to_dict() if fusion else {}})
@@ -1072,14 +1192,20 @@ class AutonomousTradingLoop:
                 pos = self.broker.positions.get(cand.symbol)
                 if pos:
                     pos.active_thesis_id = thesis.thesis_id
-                self._emit("thesis", f"{cand.symbol} 建立投资论点（ACTIVE）", symbol=cand.symbol,
+                self._emit("thesis", self._t(f"{cand.symbol} 建立投资论点（ACTIVE）",
+                                             f"{cand.symbol} investment thesis opened (ACTIVE)"),
+                           symbol=cand.symbol,
                            payload={"thesis_id": thesis.thesis_id, "proposal_id": proposal.proposal_id,
                                     "thesis": research.thesis})
         if not summary["actions"]:
-            reason = ("本轮扫描无高于阈值的候选且持仓无需调整"
-                      if candidates else "候选池全部无法取得行情数据")
+            reason = (self._t("本轮扫描无高于阈值的候选且持仓无需调整",
+                              "no candidate cleared the threshold this scan and no position needed adjusting")
+                      if candidates else
+                      self._t("候选池全部无法取得行情数据",
+                              "no candidate in the pool had usable market data"))
             top = [{"symbol": c.symbol, "score": round(c.score, 3)} for c in candidates[:5]]
-            self._emit("no_action", f"NO_ACTION：{reason}（阈值 {threshold}）",
+            self._emit("no_action", self._t(f"NO_ACTION：{reason}（阈值 {threshold}）",
+                                            f"NO_ACTION: {reason} (threshold {threshold})"),
                        payload={"reason": "no_qualifying_candidate", "threshold": threshold,
                                 "top_scores": top})
             summary["no_actions"].append("no_qualifying_candidate")
@@ -1117,7 +1243,8 @@ class AutonomousTradingLoop:
         quant_model = (quant.model if quant else {}) or {}
         quant_component = (
             comp("HEALTHY",
-                 f"{quant_model.get('display', '')} · {len(quant.predictions)} 预测",
+                 self._t(f"{quant_model.get('display', '')} · {len(quant.predictions)} 预测",
+                         f"{quant_model.get('display', '')} · {len(quant.predictions)} predictions"),
                  model=quant_model.get("display"),
                  model_id=quant_model.get("model_id"),
                  predictions=len(quant.predictions) if quant else 0,
@@ -1126,18 +1253,20 @@ class AutonomousTradingLoop:
                  as_of=quant.as_of if quant else "")
             if quant_ok else
             comp("UNAVAILABLE",
-                 quant.error if quant else "尚未运行推理",
+                 quant.error if quant else self._t("尚未运行推理", "no inference has run yet"),
                  model=quant_model.get("display"),
                  stale_instruments=len(quant.skipped) if quant else 0,
                  skipped=(quant.skipped[:8] if quant else []))
         )
 
         llm_component = (
-            comp("HEALTHY", f"{self.session.research_mode} 研究已接入")
+            comp("HEALTHY", self._t(f"{self.session.research_mode} 研究已接入",
+                                    f"{self.session.research_mode} research is wired in"))
             if llm_active else
             comp("UNAVAILABLE",
-                 self.llm_init_error or ("未启用 LLM 研究模式" if not llm_requested
-                                         else "LLM 研究不可用"),
+                 self.llm_init_error or (
+                     self._t("未启用 LLM 研究模式", "LLM research mode is not enabled") if not llm_requested
+                     else self._t("LLM 研究不可用", "LLM research unavailable")),
                  requested=llm_requested)
         )
 
@@ -1146,15 +1275,20 @@ class AutonomousTradingLoop:
             "effective_mode": self.effective_mode,
             "components": {
                 "market_data": comp("HEALTHY" if market_ok else "DEGRADED",
-                                    f"{fresh_quotes} 只实时/延时报价" if market_ok
-                                    else "无新鲜报价（可能休市或数据源不可达）",
+                                    self._t(f"{fresh_quotes} 只实时/延时报价",
+                                            f"{fresh_quotes} live/delayed quotes") if market_ok
+                                    else self._t("无新鲜报价（可能休市或数据源不可达）",
+                                                 "no fresh quotes (market may be closed or the source unreachable)"),
                                     fresh_quotes=fresh_quotes),
                 "quant": quant_component,
                 "llm": llm_component,
-                "research": comp("ACTIVE", "确定性信号研究始终可用"),
-                "risk": comp("HEALTHY", f"已拒绝 {self.session.risk_rejections} 次"),
+                "research": comp("ACTIVE", self._t("确定性信号研究始终可用",
+                                                   "deterministic signal research is always available")),
+                "risk": comp("HEALTHY", self._t(f"已拒绝 {self.session.risk_rejections} 次",
+                                                f"{self.session.risk_rejections} rejections so far")),
                 "virtual_broker": comp("HEALTHY" if broker_ok else "HALTED",
-                                       "撮合正常" if broker_ok else "Kill switch 已激活"),
+                                       self._t("撮合正常", "fills operating normally") if broker_ok
+                                       else self._t("Kill switch 已激活", "kill switch is active")),
             },
             "activity": {
                 "stage": self.current_stage,
@@ -1182,8 +1316,11 @@ class AutonomousTradingLoop:
         secid = self._secid_by_symbol.get(symbol, "")
         price, fx_info = self._account_price(quote)
         if price <= 0:
-            self._emit("no_action", f"{symbol} 无法换算到账户货币 {session.currency}"
-                                    f"（标的货币 {quote.get('currency')}，FX 数据不可用），跳过",
+            self._emit("no_action", self._t(
+                f"{symbol} 无法换算到账户货币 {session.currency}"
+                f"（标的货币 {quote.get('currency')}，FX 数据不可用），跳过",
+                f"{symbol} cannot be converted to the account currency {session.currency} "
+                f"(instrument currency {quote.get('currency')}, FX data unavailable); skipped"),
                        symbol=symbol, payload={"proposal_id": proposal.proposal_id,
                                                "reason": "fx_unavailable"})
             summary["no_actions"].append(f"{symbol}:fx_unavailable")
@@ -1192,14 +1329,19 @@ class AutonomousTradingLoop:
         if session.status == SessionStatus.HALTED or self.broker.kill_switch_active:
             proposal.status = "rejected"
             self._persist_proposal(proposal)
-            self._emit("risk", f"{symbol} 提案被拒：会话已紧急停止", symbol=symbol,
+            self._emit("risk", self._t(f"{symbol} 提案被拒：会话已紧急停止",
+                                       f"{symbol} proposal rejected: session is emergency-stopped"),
+                       symbol=symbol,
                        payload={"proposal_id": proposal.proposal_id, "reason": "halted"})
             return False
 
         proposal.status = "pending"
         self._persist_proposal(proposal)
-        self._emit("proposal", f"{symbol} 生成 {proposal.action.value.upper()} 提案，"
-                               f"目标权重 {proposal.target_weight:.1%}，置信度 {proposal.confidence:.2f}",
+        self._emit("proposal", self._t(
+            f"{symbol} 生成 {proposal.action.value.upper()} 提案，"
+            f"目标权重 {proposal.target_weight:.1%}，置信度 {proposal.confidence:.2f}",
+            f"{symbol} {proposal.action.value.upper()} proposal created, "
+            f"target weight {proposal.target_weight:.1%}, confidence {proposal.confidence:.2f}"),
                    secid=secid, symbol=symbol,
                    payload={"proposal_id": proposal.proposal_id, "proposal": proposal.to_dict(),
                             "quote_at_decision": quote,
@@ -1214,9 +1356,12 @@ class AutonomousTradingLoop:
         )
         risk_payload = result.to_payload()
         proposal.risk_result = proposal.risk_result | risk_payload
-        self._emit("risk", f"{symbol} 风控：{'通过' if result.approved else '拒绝'}"
-                           f"{'（已调整 ' + f'{result.original_target_weight:.1%}→{result.adjusted_target_weight:.1%}' + '）' if result.adjusted else ''}"
-                           f" — {result.reason}",
+        adj = f"{result.original_target_weight:.1%}→{result.adjusted_target_weight:.1%}"
+        self._emit("risk", self._t(
+            f"{symbol} 风控：{'通过' if result.approved else '拒绝'}"
+            f"{f'（已调整 {adj}）' if result.adjusted else ''} — {result.reason}",
+            f"{symbol} risk check: {'approved' if result.approved else 'rejected'}"
+            f"{f' (adjusted {adj})' if result.adjusted else ''} — {result.reason}"),
                    secid=secid, symbol=symbol,
                    payload={"proposal_id": proposal.proposal_id, "risk_result": risk_payload})
         if not result.approved:
@@ -1257,9 +1402,13 @@ class AutonomousTradingLoop:
 
         # ── sizing explainability event ──
         expected_amount = qty * price
-        self._emit("sizing", f"{symbol} 仓位计算：{qty} 股 @ {price:.2f}，"
-                             f"预计金额 {expected_amount:,.0f}（权重 {final_weight:.2%}，"
-                             f"资产 {self.broker.account.equity:,.0f}，最小单位 {lot_size} 股）",
+        self._emit("sizing", self._t(
+            f"{symbol} 仓位计算：{qty} 股 @ {price:.2f}，"
+            f"预计金额 {expected_amount:,.0f}（权重 {final_weight:.2%}，"
+            f"资产 {self.broker.account.equity:,.0f}，最小单位 {lot_size} 股）",
+            f"{symbol} sizing: {qty} shares @ {price:.2f}, "
+            f"expected amount {expected_amount:,.0f} (weight {final_weight:.2%}, "
+            f"equity {self.broker.account.equity:,.0f}, lot size {lot_size})"),
                    secid=secid, symbol=symbol,
                    payload={
                        "proposal_id": proposal.proposal_id,
@@ -1275,7 +1424,9 @@ class AutonomousTradingLoop:
         if qty <= 0:
             proposal.status = "rejected"
             self._persist_proposal(proposal)
-            self._emit("no_action", f"{symbol} 定量后数量为 0（价格 {price}，权重 {final_weight:.1%}），不下单",
+            self._emit("no_action", self._t(
+                f"{symbol} 定量后数量为 0（价格 {price}，权重 {final_weight:.1%}），不下单",
+                f"{symbol} sized to zero shares (price {price}, weight {final_weight:.1%}); no order sent"),
                        symbol=symbol, payload={"proposal_id": proposal.proposal_id, "reason": "zero_quantity"})
             summary["no_actions"].append(f"{symbol}:zero_quantity")
             return False
@@ -1286,7 +1437,9 @@ class AutonomousTradingLoop:
             account_id=self.broker.account.account_id, symbol=symbol, side=side,
             order_type=OrderType.MARKET, quantity=qty, proposal_id=proposal.proposal_id,
         )
-        self._emit("order", f"{symbol} 提交 {side.value.upper()} 市价单 ×{qty}", secid=secid, symbol=symbol,
+        self._emit("order", self._t(f"{symbol} 提交 {side.value.upper()} 市价单 ×{qty}",
+                                    f"{symbol} submitted {side.value.upper()} market order ×{qty}"),
+                   secid=secid, symbol=symbol,
                    payload={"proposal_id": proposal.proposal_id, "order_id": order.order_id,
                             "quantity": qty, "price_ref": price, "freshness": freshness,
                             "instrument_price": quote.get("price", 0.0),
@@ -1303,7 +1456,9 @@ class AutonomousTradingLoop:
         if submitted.status not in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED):
             proposal.status = "rejected"
             self._persist_proposal(proposal)
-            self._emit("error", f"{symbol} 订单未成交：{submitted.error or submitted.status.value}",
+            self._emit("error", self._t(
+                f"{symbol} 订单未成交：{submitted.error or submitted.status.value}",
+                f"{symbol} order not filled: {submitted.error or submitted.status.value}"),
                        symbol=symbol, payload={"proposal_id": proposal.proposal_id,
                                                "order": submitted.to_dict()})
             return False
@@ -1312,17 +1467,22 @@ class AutonomousTradingLoop:
         self._persist_proposal(proposal)
         fill = self.broker.fills[-1]
         self.broker.decisions.append(proposal.to_dict())
-        self._emit("fill", f"{symbol} 成交 {side.value.upper()} ×{fill.quantity} @ {fill.price:.2f}"
-                           f"（佣金 {fill.commission:.2f}）",
+        self._emit("fill", self._t(
+            f"{symbol} 成交 {side.value.upper()} ×{fill.quantity} @ {fill.price:.2f}"
+            f"（佣金 {fill.commission:.2f}）",
+            f"{symbol} filled {side.value.upper()} ×{fill.quantity} @ {fill.price:.2f} "
+            f"(commission {fill.commission:.2f})"),
                    secid=secid, symbol=symbol,
                    payload={"proposal_id": proposal.proposal_id, "fill": fill.to_dict(),
                             "order_id": order.order_id})
 
         # ── decision story ── the full provenance chain in one event
-        self._emit("decision", f"{symbol} {proposal.action.value.upper()} 决策完成："
-                               f"{qty} 股 @ {fill.price:.2f}，"
-                               f"权重 {final_weight:.2%}，"
-                               f"置信度 {proposal.confidence:.2f}",
+        self._emit("decision", self._t(
+            f"{symbol} {proposal.action.value.upper()} 决策完成："
+            f"{qty} 股 @ {fill.price:.2f}，权重 {final_weight:.2%}，置信度 {proposal.confidence:.2f}",
+            f"{symbol} {proposal.action.value.upper()} decision complete: "
+            f"{qty} shares @ {fill.price:.2f}, weight {final_weight:.2%}, "
+            f"confidence {proposal.confidence:.2f}"),
                    secid=secid, symbol=symbol,
                    payload={
                        "proposal_id": proposal.proposal_id,
@@ -1338,8 +1498,11 @@ class AutonomousTradingLoop:
                        "status": "executed",
                    })
         position = self.broker.positions.get(symbol)
-        self._emit("position", f"{symbol} 持仓更新：{position.quantity if position else 0} 股，"
-                               f"现金 {self.broker.account.cash:,.0f}，总资产 {self.broker.account.equity:,.0f}",
+        self._emit("position", self._t(
+            f"{symbol} 持仓更新：{position.quantity if position else 0} 股，"
+            f"现金 {self.broker.account.cash:,.0f}，总资产 {self.broker.account.equity:,.0f}",
+            f"{symbol} position updated: {position.quantity if position else 0} shares, "
+            f"cash {self.broker.account.cash:,.0f}, equity {self.broker.account.equity:,.0f}"),
                    secid=secid, symbol=symbol,
                    payload={"proposal_id": proposal.proposal_id,
                             "position": position.to_dict() if position else None,
@@ -1357,7 +1520,9 @@ class AutonomousTradingLoop:
             realized = (fill.price - pre_avg_cost) * fill.quantity
             thesis.close(exit_reason, proposal.rationale.thesis, realized)
             self._save_thesis(thesis)
-            self._emit("exit", f"{symbol} 退出：{exit_reason.value} — {proposal.rationale.thesis}",
+            self._emit("exit", self._t(
+                f"{symbol} 退出：{exit_reason.value} — {proposal.rationale.thesis}",
+                f"{symbol} exit: {exit_reason.value} — {proposal.rationale.thesis}"),
                        symbol=symbol,
                        payload={"proposal_id": proposal.proposal_id, "thesis_id": thesis.thesis_id,
                                 "exit_reason": exit_reason.value, "realized_pnl": realized,
@@ -1412,7 +1577,8 @@ class AutonomousTradingLoop:
         # Persist a truth snapshot so the /system-truth endpoint stays honest
         # even for a loop restored after a restart (which hasn't re-run quant).
         try:
-            self._emit("truth", "系统真相快照", payload=self.system_truth())
+            self._emit("truth", self._t("系统真相快照", "System truth snapshot"),
+                       payload=self.system_truth())
         except Exception:
             logger.exception("system truth snapshot failed")
         summary["equity"] = session.current_equity
@@ -1450,7 +1616,9 @@ class TradingScheduler:
                     except Exception as exc:
                         logger.exception("Trading cycle failed")
                         session.error = str(exc)
-                        loop._emit("error", f"交易循环异常：{exc}", payload={"error": str(exc)})
+                        loop._emit("error", loop._t(f"交易循环异常：{exc}",
+                                                    f"Trading loop error: {exc}"),
+                                   payload={"error": str(exc)})
                         loop.store.save_session(session)
                     session.next_cycle_at = datetime.fromtimestamp(
                         time.time() + session.scan_interval, tz=timezone.utc

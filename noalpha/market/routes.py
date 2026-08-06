@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field
 
 from noalpha.market.eastmoney_provider import EastmoneyProvider
 from noalpha.market.gateway import market_gateway
-from noalpha.market.instruments import CN_INDEX_SECIDS, US_INDEX_SECIDS, parse_secid
+from noalpha.i18n import DEFAULT_LANG, is_zh
+from noalpha.market.instruments import (
+    CN_INDEX_SECIDS, US_INDEX_SECIDS, index_display_name, parse_secid,
+)
 from noalpha.market.kline_service import PERIODS, KlineService
 from noalpha.market.watchlist_store import MarketWatchlistStore
 
@@ -37,9 +40,15 @@ def register_market_routes(app: FastAPI, db_path: Path, admin_dependency: Any | 
         return {"items": provider.search(q, limit=limit), "source": provider.source_name}
 
     @app.get("/api/v1/market/overview")
-    def market_overview() -> dict[str, Any]:
+    def market_overview(lang: str = DEFAULT_LANG) -> dict[str, Any]:
         quotes = market_gateway.fetch_now(CN_INDEX_SECIDS + US_INDEX_SECIDS)
-        by_secid = {q.to_dict()["secid"]: q.to_dict() for q in quotes}
+        zh = is_zh(lang)
+        by_secid: dict[str, dict[str, Any]] = {}
+        for q in quotes:
+            row = q.to_dict()
+            # Providers label every index in Chinese, including the US ones.
+            row["name"] = index_display_name(row["secid"], zh, fallback=row.get("name", ""))
+            by_secid[row["secid"]] = row
         return {
             "cn_indices": [by_secid[s] for s in CN_INDEX_SECIDS if s in by_secid],
             "us_indices": [by_secid[s] for s in US_INDEX_SECIDS if s in by_secid],

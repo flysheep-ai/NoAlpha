@@ -150,10 +150,13 @@ export const api = {
     }),
   cases: () => request<{ items: CaseSummary[]; total: number }>("/api/v1/cases"),
   caseDetail: (id: string) => request<{ case: CaseSummary; snapshots: Array<Record<string, unknown>> }>(`/api/v1/cases/${id}`),
-  settings: () => request<SettingsPayload>("/api/v1/settings"),
+  settings: (lang?: string) =>
+    request<SettingsPayload>(`/api/v1/settings${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   // ── market ──
   marketSearch: (q: string) => request<{ items: MarketSearchItem[] }>(`/api/v1/market/search?q=${encodeURIComponent(q)}`),
-  marketOverview: () => request<{ cn_indices: MarketQuote[]; us_indices: MarketQuote[] }>("/api/v1/market/overview"),
+  marketOverview: (lang?: string) =>
+    request<{ cn_indices: MarketQuote[]; us_indices: MarketQuote[] }>(
+      `/api/v1/market/overview${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
   marketQuote: (secid: string) => request<MarketQuote>(`/api/v1/market/quote/${secid}`),
   marketKlines: (secid: string, period: string, limit = 200) =>
     request<{ bars: KlineBar[]; source: string; error: string | null }>(`/api/v1/market/klines/${secid}?period=${period}&limit=${limit}`),

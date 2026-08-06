@@ -13,7 +13,7 @@ from noalpha.llm.config import LLMConfig
 from noalpha.llm.provider import OpenAICompatibleProvider
 from noalpha.llm.schemas import LLMMessage
 from noalpha.market.eastmoney_provider import EastmoneyProvider
-from noalpha.market.instruments import CN_INDEX_SECIDS, US_INDEX_SECIDS
+from noalpha.market.instruments import CN_INDEX_SECIDS, INDEX_DISPLAY_NAMES, US_INDEX_SECIDS
 from noalpha.pipeline import InvestigationPipeline
 from noalpha.research_mode import ResearchMode
 
@@ -44,15 +44,6 @@ _MARKET_QUERY_KEYWORDS = {
     "en-US": ["market", "index", "how is the", "how did the", "how are", "indices", "spx", "dow", "nasdaq", "s&p"],
 }
 
-_INDEX_INFO = {
-    "100.SPX":  ("S&P 500",       "标普500"),
-    "100.NDX":  ("Nasdaq 100",    "纳斯达克100"),
-    "100.DJIA": ("Dow Jones",     "道琼斯工业"),
-    "1.000001": ("SSE Composite", "上证指数"),
-    "0.399001": ("SZSE Component","深证成指"),
-    "0.399006": ("ChiNext",       "创业板指"),
-    "1.000688": ("SSE STAR 50",   "科创50"),
-}
 
 
 def _no_llm_message(lang: str) -> str:
@@ -274,7 +265,7 @@ class ChatAgent:
         for qte in quotes:
             d = qte.to_dict()
             secid = d.get("secid", "")
-            name_en, name_zh = _INDEX_INFO.get(secid, (qte.name, qte.name))
+            name_en, name_zh = INDEX_DISPLAY_NAMES.get(secid, (qte.name, qte.name))
             results.append({
                 "name": name_zh if lang == "zh-CN" else name_en,
                 "price": qte.price,

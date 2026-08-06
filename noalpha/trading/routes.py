@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from noalpha.i18n import DEFAULT_LANG
 from noalpha.market.gateway import market_gateway
 from noalpha.market.calendar import GlobalMarketSnapshot, global_snapshot, market_status, Market, MARKET_LABEL
 from noalpha.trading.autonomous import (
@@ -37,6 +38,7 @@ class SessionCreateBody(BaseModel):
     max_daily_loss_pct: float = Field(default=0.05, gt=0, le=0.5)
     max_orders_per_day: int = Field(default=20, ge=1, le=200)
     allow_closed_market_fills: bool = False
+    lang: str = Field(default=DEFAULT_LANG, max_length=16)
 
 
 class DebugProposalBody(BaseModel):
@@ -130,6 +132,7 @@ def register_trading_routes(app: FastAPI, state_dir: Path, admin_dependency: Any
             max_daily_loss_pct=body.max_daily_loss_pct,
             max_orders_per_day=body.max_orders_per_day,
             allow_closed_market_fills=body.allow_closed_market_fills,
+            lang=body.lang,
         )
         store.save_session(session)
         broker = VirtualBroker(initial_cash=body.initial_capital, currency=currency)

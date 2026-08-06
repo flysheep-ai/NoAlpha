@@ -113,7 +113,7 @@ function LangSwitch() {
   const { i18n } = useTranslation();
   const toggle = () => i18n.changeLanguage(i18n.language.startsWith("zh") ? "en-US" : "zh-CN");
   return (
-    <button className="nav-item lang-switch-btn" onClick={toggle} title={i18n.language === "zh" ? "Switch to English" : "切换到中文"}>
+    <button className="nav-item lang-switch-btn" onClick={toggle} title={i18n.language.startsWith("zh") ? "Switch to English" : "切换到中文"}>
       <Globe size={17} />
       <span>{i18n.language.startsWith("zh") ? "English" : "中文"}</span>
     </button>
@@ -764,8 +764,10 @@ function LLMSettingsPanel({ llm, onSaved }: { llm: LLMSettings; onSaved: () => v
 }
 
 function SettingsPage() {
-  const { t } = useTranslation();
-  const { data, error, loading, refresh } = useAsync(api.settings, []);
+  const { t, i18n } = useTranslation();
+  // Provider descriptions are rendered by the backend, so refetch on language change.
+  const load = React.useCallback(() => api.settings(i18n.language), [i18n.language]);
+  const { data, error, loading, refresh } = useAsync(load, [i18n.language]);
   const [token, setToken] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [msg, setMsg] = React.useState<{ text: string; ok: boolean } | null>(null);
