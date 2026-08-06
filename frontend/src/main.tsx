@@ -64,7 +64,7 @@ function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">SA</div>
+          <div className="brand-mark">NA</div>
           <div>
             <strong>{t("app.brand")}</strong>
             <span>{t("app.subtitle")}</span>

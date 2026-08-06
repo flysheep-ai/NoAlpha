@@ -10,6 +10,25 @@
 
 ---
 
+![自主交易控制台](docs/images/trading-console.jpg)
+
+> **这张图里最重要的不是净值，是那两个红色的 `UNAVAILABLE`。**
+> 系统在自己的界面上承认：这一轮决策里，量化模型没有产出新特征、LLM 研究没有启用，
+> 它已如实降级为确定性信号策略——而不是假装用了它并没有用上的能力。
+> 大多数系统会把这行字藏进日志，这里它就在最显眼的地方。
+
+![交易看板](docs/images/trading-board.jpg)
+
+> 每一笔持仓都能追到它的**决策故事**和**提案**：谁提的、依据什么信号、置信度多少、
+> 用的是哪种决策模式。「量化推理不可用」也照样写在面板上，不做静默兜底。
+
+| Walk-forward 实验：泄漏 vs 干净 | 跨市场行情驾驶舱 |
+| :--- | :--- |
+| [![Walk-forward 实验](docs/images/quant-walkforward.jpg)](docs/images/quant-walkforward.jpg) | [![跨市场行情](docs/images/market-cockpit.jpg)](docs/images/market-cockpit.jpg) |
+| `cn-lightgbm-LEAKY` 的 Rank IC 是 **0.3644**，净收益却是 **−33.07%**；`cn-lightgbm-CLEAN` 的 Rank IC 只有 **0.0274**，净收益 **+11.45%**。同一份代码、同一段历史，差别只在一个泄漏开关——漂亮的 IC 可以完全不换来钱。 | A 股四大指数 + 美股三大指数 + 自选股实时报价，行情源逐条标注（Eastmoney / 收盘 / 盘前）。数据新鲜度和延迟秒数是接口的一等字段，不是事后补的注释。 |
+
+---
+
 ## 这个项目新在哪
 
 以下四件事，我们在现有开源交易项目里没有找到对应实现：

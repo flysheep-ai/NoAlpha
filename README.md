@@ -15,6 +15,32 @@ project refuses to claim what it cannot prove — including about itself.
 
 ---
 
+![Autonomous trading console](docs/images/trading-console.jpg)
+
+> **The important thing in this screenshot is not the P&L — it's the two red `UNAVAILABLE` badges.**
+> The system is telling you, in its own UI, that the quant model produced no fresh
+> features this cycle and the LLM research layer was never enabled. It has downgraded
+> itself to a deterministic signal strategy and says so, instead of pretending to
+> capabilities it did not use. Most systems bury that line in a log file; here it sits
+> at the top of the screen.
+
+![Trading board](docs/images/trading-board.jpg)
+
+> Every position traces back to the **decision story** and **proposal** that produced it:
+> which signals fired, at what confidence, under which decision mode. "Quant inference
+> unavailable" is printed on the panel too — no silent fallback.
+
+| Walk-forward experiments: leaky vs. clean | Cross-market cockpit |
+| :--- | :--- |
+| [![Walk-forward experiments](docs/images/quant-walkforward.jpg)](docs/images/quant-walkforward.jpg) | [![Cross-market cockpit](docs/images/market-cockpit.jpg)](docs/images/market-cockpit.jpg) |
+| `cn-lightgbm-LEAKY` posts a Rank IC of **0.3644** and a net return of **−33.07%**. `cn-lightgbm-CLEAN` posts a Rank IC of **0.0274** and **+11.45%**. Same code, same history — the only difference is one leakage switch. A beautiful IC can convert to nothing at all. | Four A-share indices, three US indices, and a live watchlist. Every row carries its provenance (Eastmoney / closed / pre-market). Freshness and delay-in-seconds are first-class fields in the API, not afterthoughts. |
+
+> Screenshots show the Chinese locale; the console ships with an English/Chinese
+> toggle in the sidebar. Some in-page copy and the agent's generated decision
+> narratives are Chinese-only for now.
+
+---
+
 ## What's new here
 
 Four things this repository does that we could not find in existing open-source
