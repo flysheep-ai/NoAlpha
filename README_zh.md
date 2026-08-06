@@ -1,12 +1,64 @@
-# NoAlpha
+<div align="center">
+  <a href="https://github.com/flysheep-ai/NoAlpha">
+    <img src="docs/images/icon.png" height="220" alt="NoAlpha">
+  </a>
+  <h1 align="center">
+    <a href="https://github.com/flysheep-ai/NoAlpha">NoAlpha</a>
+  </h1>
+</div>
 
-**为 LLM 交易研究提供可信的度量层。**
+<p align="center">
+  <strong>为 LLM 交易研究提供可信的度量层。</strong>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> ·
+  <strong>中文</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE">
+    <img alt="License: MIT" src="https://img.shields.io/badge/LICENSE-MIT-brightgreen.svg?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=000000&logoWidth=20">
+  </a>
+  <a href="https://www.python.org/downloads/">
+    <img alt="Python 3.11+" src="https://img.shields.io/badge/PYTHON-3.11+-blue.svg?style=for-the-badge&logo=python&logoColor=white&labelColor=000000&logoWidth=20">
+  </a>
+  <a href="https://github.com/flysheep-ai/NoAlpha/actions/workflows/tests.yml">
+    <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/flysheep-ai/NoAlpha/tests.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&labelColor=000000&label=TESTS">
+  </a>
+  <a href="docs/">
+    <img alt="Docs: ADR + audit reports" src="https://img.shields.io/badge/DOCS-ADR%20+%20AUDIT-blueviolet.svg?style=for-the-badge&logo=readthedocs&logoColor=white&labelColor=000000&logoWidth=20">
+  </a>
+  <a href="https://github.com/flysheep-ai/NoAlpha/stargazers">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/flysheep-ai/NoAlpha?style=for-the-badge&logo=github&logoColor=white&labelColor=000000&color=f5c518">
+  </a>
+</p>
+
+<p align="center">
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#这个项目新在哪">项目新在哪</a> ·
+  <a href="#这套度量层测出了什么">实测结果</a> ·
+  <a href="#在相信任何东西之前请先读这些限制">已知限制</a> ·
+  <a href="docs/adr/">架构决策</a>
+</p>
+
+---
 
 绝大多数 AI 交易项目**无法告诉你它的超额收益是不是真的**。回答这个问题所需要的工具——point-in-time 纪律、泄漏检测、LLM 贡献的诚实归因——要么缺失，要么被想当然。本项目就是这套工具，外加一个可运行的 A 股 / 美股研究与模拟交易系统。
 
 **为什么叫 "NoAlpha"？** 因为宣称 alpha 很容易，证明 alpha 很难。这个项目拒绝宣称它无法证明的东西——**包括关于它自己的**。
 
-[English](README.md) · MIT 协议
+## ✨ 核心特性
+
+- 🔒 **Point-in-time 是结构性的** —— label 自带执行假设（`open[T+1+h]/open[T+1]-1`）。同 bar 执行在结构上不可能，而不只是"不推荐"。
+- 🕰️ **Forward-only 的 LLM 特征采集** —— append-only 存储，`available_at` 取一次真实 LLM 调用的墙钟完成时间，并且**拒绝补写历史**。据我们所知，这是针对**参数性前视**唯一的开源防御实现。
+- 🧪 **一个能伪造出自身欺诈的回测系统** —— 一条命令复现**13.3 倍的 Rank IC 虚高**，差别只在换掉一个 label；一旦泄漏不再复现，脚本以非零码退出。
+- 📊 **三臂归因** —— `quant_only` / `deterministic_hybrid` / `llm_hybrid` 跑在同一行情、同一成本假设、同一周期时序上，于是"LLM 到底有没有用"是一个可归因的数字，而不是一种感觉。
+- 🚦 **晋级是门禁，不是习惯** —— `EXPERIMENTAL → VALIDATED → SHADOW → PAPER → ACTIVE` 逐级推进、代码强制。美股模型没跑赢基准，就停在 `SHADOW` 且不参与交易。
+- 🧭 **LLM 永远不下单** —— 它输出结构化信号进入版本化的确定性融合策略，该策略可以降权或否决，但不能发起交易。代码库中任何地方都不存在 `"you are a trader"` 提示词。
+- 🌏 **A 股 + 美股** —— 多主机 provider 回退链、交易所时间戳驱动的 freshness、交易日历；延迟秒数是接口的一等字段。
+- 🖥️ **会承认自己没用上什么的控制台** —— FastAPI + React；每一笔持仓都能追回产生它的决策故事，未启用的层在界面上标 `UNAVAILABLE`，而不是静默伪装。
+- ♻️ **端到端可复现** —— `pytest tests/ -q` → 141 passed，其中含 7 项主动尝试把未来信息偷渡过 PIT 守卫的 leakage attack 测试。
 
 ---
 
@@ -181,7 +233,7 @@ noalpha trading status
 ### 测试
 
 ```bash
-pytest tests/ -q     # 141 passed, 3 skipped
+pytest tests/ -q     # 141 passed, 4 skipped
 ```
 
 其中含 7 项 leakage attack 测试（主动尝试把未来信息偷渡过 PIT 守卫），以及硬不变量测试（已成交的 proposal 永远不可能报告为 pending）。
@@ -193,6 +245,26 @@ pytest tests/ -q     # 141 passed, 3 skipped
 - [`docs/audit/phase_q5_report.md`](docs/audit/phase_q5_report.md) —— LLM 融合工作，以及为什么 LLM 那一臂仍是 `INSUFFICIENT_SAMPLE`
 - [`docs/research/deep_dives/`](docs/research/deep_dives/) —— 对 TradingAgents、Qlib、Lean、NautilusTrader、OpenBB、Freqtrade 等项目的源码级阅读
 
+## 参与贡献
+
+最有价值的贡献是**让度量更严格**的那种，而不是让数字更好看的那种：
+
+- **扩大 universe。** 每个市场只有 24 只标的，是上面每一张结果表最大的短板 —— 见[已知限制](#在相信任何东西之前请先读这些限制)。
+- **攻击 point-in-time 守卫。** 如果你能把未来信息偷渡过去，那正是我们想要的 bug 报告，欢迎补进 leakage attack 测试集。
+- **时点指数成分股数据**，用来摘掉 `survivorship_bias_risk` 这个标记。
+
+较大的 PR 请先开一个 [issue](https://github.com/flysheep-ai/NoAlpha/issues)。提交前请先跑 `pytest tests/ -q`；**任何以削弱守卫为代价换取指标提升的改动都不会被合并。**
+
+## Star 趋势
+
+<a href="https://star-history.com/#flysheep-ai/NoAlpha&Date">
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=flysheep-ai/NoAlpha&type=Date" width="600">
+</a>
+
 ## 免责声明
 
 研究与教育用途软件。**不构成任何金融、投资或交易建议。** 模拟结果不代表真实表现。不要用它碰真钱。
+
+<p align="center">
+  MIT © <a href="https://github.com/flysheep-ai">flysheep-ai</a>
+</p>

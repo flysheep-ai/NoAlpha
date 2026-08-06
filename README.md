@@ -1,6 +1,48 @@
-# NoAlpha
+<div align="center">
+  <a href="https://github.com/flysheep-ai/NoAlpha">
+    <img src="docs/images/icon.png" height="220" alt="NoAlpha">
+  </a>
+  <h1 align="center">
+    <a href="https://github.com/flysheep-ai/NoAlpha">NoAlpha</a>
+  </h1>
+</div>
 
-**Trustworthy measurement for LLM trading research.**
+<p align="center">
+  <strong>Trustworthy measurement for LLM trading research.</strong>
+</p>
+
+<p align="center">
+  <strong>English</strong> ·
+  <a href="README_zh.md">中文</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE">
+    <img alt="License: MIT" src="https://img.shields.io/badge/LICENSE-MIT-brightgreen.svg?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=000000&logoWidth=20">
+  </a>
+  <a href="https://www.python.org/downloads/">
+    <img alt="Python 3.11+" src="https://img.shields.io/badge/PYTHON-3.11+-blue.svg?style=for-the-badge&logo=python&logoColor=white&labelColor=000000&logoWidth=20">
+  </a>
+  <a href="https://github.com/flysheep-ai/NoAlpha/actions/workflows/tests.yml">
+    <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/flysheep-ai/NoAlpha/tests.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&labelColor=000000&label=TESTS">
+  </a>
+  <a href="docs/">
+    <img alt="Docs: ADR + audit reports" src="https://img.shields.io/badge/DOCS-ADR%20+%20AUDIT-blueviolet.svg?style=for-the-badge&logo=readthedocs&logoColor=white&labelColor=000000&logoWidth=20">
+  </a>
+  <a href="https://github.com/flysheep-ai/NoAlpha/stargazers">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/flysheep-ai/NoAlpha?style=for-the-badge&logo=github&logoColor=white&labelColor=000000&color=f5c518">
+  </a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#whats-new-here">What's new here</a> ·
+  <a href="#what-the-instruments-measured">Results</a> ·
+  <a href="#limitations-you-should-read-before-trusting-anything-here">Limitations</a> ·
+  <a href="docs/adr/">ADRs</a>
+</p>
+
+---
 
 Most AI trading projects cannot tell you whether their edge is real. The tooling
 to answer that question — point-in-time discipline, leakage detection, honest
@@ -11,7 +53,17 @@ research and simulated-trading system.
 **Why "NoAlpha"?** Because claiming alpha is easy and proving it is hard. This
 project refuses to claim what it cannot prove — including about itself.
 
-[中文说明](README_zh.md) · MIT licensed
+## ✨ Features
+
+- 🔒 **Point-in-time by construction** — labels encode their execution assumption (`open[T+1+h]/open[T+1]-1`). Same-bar execution is structurally impossible, not merely discouraged.
+- 🕰️ **Forward-only LLM feature collection** — an append-only store whose `available_at` is the wall-clock end of a real LLM call, and which *refuses to backfill*. As far as we can tell, the only open-source defense against **parametric** look-ahead.
+- 🧪 **A backtest that manufactures its own fraud** — one command reproduces a **13.3× Rank IC inflation** from a single swapped label, and exits non-zero if the leak ever stops reproducing.
+- 📊 **Three-arm attribution** — `quant_only` / `deterministic_hybrid` / `llm_hybrid` run on identical quotes, costs and cycle timing, so "did the LLM help?" is an attributable number rather than a vibe.
+- 🚦 **Promotion is a gate, not a habit** — `EXPERIMENTAL → VALIDATED → SHADOW → PAPER → ACTIVE`, enforced in code. The US model failed to beat its benchmark, so it sits at `SHADOW` and does not trade.
+- 🧭 **The LLM never places an order** — it emits a structured signal into a versioned deterministic fusion policy that can damp or veto, but not originate, a trade. No `"you are a trader"` prompt exists anywhere in the codebase.
+- 🌏 **A-shares and US equities** — multi-host provider fallback, exchange-timestamp freshness, trading calendars; delay-in-seconds is a first-class API field.
+- 🖥️ **A console that admits what it didn't use** — FastAPI + React; every position traces back to the decision story that produced it, and unavailable layers are labelled `UNAVAILABLE` on screen instead of silently faked.
+- ♻️ **Reproducible end to end** — `pytest tests/ -q` → 141 passed, including 7 leakage-attack tests that actively try to sneak future information past the point-in-time guard.
 
 ---
 
@@ -246,7 +298,7 @@ noalpha trading status
 ### Tests
 
 ```bash
-pytest tests/ -q     # 141 passed, 3 skipped
+pytest tests/ -q     # 141 passed, 4 skipped
 ```
 
 Includes 7 leakage-attack tests that try to sneak future information past the
@@ -264,8 +316,34 @@ can never report as pending.
 - [`docs/research/deep_dives/`](docs/research/deep_dives/) — source-level reads
   of TradingAgents, Qlib, Lean, NautilusTrader, OpenBB, Freqtrade and others
 
+## Contributing
+
+The highest-value contributions are the ones that make the measurement stricter,
+not the ones that make the numbers prettier:
+
+- **Widen the universe.** 24 instruments per market is the biggest open weakness
+  in every result table above — see [limitations](#limitations-you-should-read-before-trusting-anything-here).
+- **Attack the point-in-time guard.** If you can sneak future information past
+  it, that is a bug report we want. Add it to the leakage-attack suite.
+- **Point-in-time index constituents**, to retire the `survivorship_bias_risk`
+  flag.
+
+Please open an [issue](https://github.com/flysheep-ai/NoAlpha/issues) before a
+large PR. Run `pytest tests/ -q` first; a change that improves a metric while
+weakening a guard will not be merged.
+
+## Star History
+
+<a href="https://star-history.com/#flysheep-ai/NoAlpha&Date">
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=flysheep-ai/NoAlpha&type=Date" width="600">
+</a>
+
 ## Disclaimer
 
 Research and educational software. Not financial, investment, or trading advice.
 Simulated results are not indicative of real performance. Do not point this at
 real money.
+
+<p align="center">
+  MIT © <a href="https://github.com/flysheep-ai">flysheep-ai</a>
+</p>
