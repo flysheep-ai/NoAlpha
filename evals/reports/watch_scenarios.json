@@ -1,0 +1,324 @@
+{
+  "results": [
+    {
+      "case_count": 0,
+      "case_statuses": [],
+      "first": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "b384a83f-7717-4be1-8376-7637fe6f3223",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 1,
+        "trigger_clusters": 1,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "price_spike",
+      "second": null,
+      "snapshot_count": 0
+    },
+    {
+      "case_count": 0,
+      "case_statuses": [],
+      "first": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "441b5e4d-2578-4b7b-b834-41c43fa5f45a",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 1,
+        "trigger_clusters": 1,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "volume_spike",
+      "second": null,
+      "snapshot_count": 0
+    },
+    {
+      "case_count": 1,
+      "case_statuses": [
+        "OPEN"
+      ],
+      "first": {
+        "case_ids": [
+          "a0947b6fa92b53be"
+        ],
+        "cases_created": 1,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "ab6c9a19-9e25-46d8-9eaf-c52faca9e16b",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 3,
+        "trigger_clusters": 2,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "price_volume",
+      "second": null,
+      "snapshot_count": 1
+    },
+    {
+      "case_count": 0,
+      "case_statuses": [],
+      "first": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "3b7cd821-e608-48a7-a293-65efa64aab39",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 1,
+        "trigger_clusters": 1,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "news_burst",
+      "second": null,
+      "snapshot_count": 0
+    },
+    {
+      "case_count": 1,
+      "case_statuses": [
+        "OPEN"
+      ],
+      "first": {
+        "case_ids": [
+          "2062ebc21a239293"
+        ],
+        "cases_created": 1,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "4d145cab-1ab7-44ee-9f36-4d1a89f22656",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 1,
+        "trigger_clusters": 1,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "new_filing",
+      "second": null,
+      "snapshot_count": 1
+    },
+    {
+      "case_count": 1,
+      "case_statuses": [
+        "OPEN"
+      ],
+      "first": {
+        "case_ids": [
+          "a0947b6fa92b53be"
+        ],
+        "cases_created": 1,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "f67bed25-2743-4756-bbcb-0f7e92418175",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 3,
+        "trigger_clusters": 2,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "repeated_same_trigger",
+      "second": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 1,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "22a60799-b339-421f-9f9f-eb6c0b398b30",
+        "scanned_at": "2026-07-06T00:10:00Z",
+        "trigger_candidates": 3,
+        "trigger_clusters": 2,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "snapshot_count": 1
+    },
+    {
+      "case_count": 1,
+      "case_statuses": [
+        "MONITORING"
+      ],
+      "first": {
+        "case_ids": [
+          "a0947b6fa92b53be"
+        ],
+        "cases_created": 1,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "7b408019-93f4-4a92-9d75-dc3e58a561f0",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 4,
+        "trigger_clusters": 3,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "case_update",
+      "second": {
+        "case_ids": [
+          "a0947b6fa92b53be"
+        ],
+        "cases_created": 0,
+        "cases_updated": 1,
+        "cooldown_suppressed": 1,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 1,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "cd3bc755-6f0d-4da9-8d27-10c03b6bf85f",
+        "scanned_at": "2026-07-06T00:10:00Z",
+        "trigger_candidates": 4,
+        "trigger_clusters": 3,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "snapshot_count": 2
+    },
+    {
+      "case_count": 0,
+      "case_statuses": [],
+      "first": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [
+          "AAPL"
+        ],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 1,
+        "scan_count": 1,
+        "scan_id": "1743f9e9-a6c9-456f-a6a8-c5cc523db0a1",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 1,
+        "trigger_clusters": 1,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "provider_unauthorized",
+      "second": null,
+      "snapshot_count": 0
+    },
+    {
+      "case_count": 0,
+      "case_statuses": [],
+      "first": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "b44273d2-eda9-4ab0-a890-67fd60b2412b",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 0,
+        "trigger_clusters": 0,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "future_leakage",
+      "second": null,
+      "snapshot_count": 0
+    },
+    {
+      "case_count": 1,
+      "case_statuses": [
+        "MONITORING"
+      ],
+      "first": {
+        "case_ids": [
+          "a0947b6fa92b53be"
+        ],
+        "cases_created": 1,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "584e0c6b-3db6-4001-ad6c-b9635ce5eb05",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 3,
+        "trigger_clusters": 2,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "future_evidence_total": 0,
+      "scenario": "cooldown_bypass",
+      "second": {
+        "case_ids": [
+          "a0947b6fa92b53be"
+        ],
+        "cases_created": 0,
+        "cases_updated": 1,
+        "cooldown_suppressed": 1,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 1,
+        "investigations_started": 1,
+        "provider_failures": 0,
+        "scan_count": 1,
+        "scan_id": "ec63f9e8-96c0-43a2-962c-817273f75b09",
+        "scanned_at": "2026-07-06T00:10:00Z",
+        "trigger_candidates": 3,
+        "trigger_clusters": 2,
+        "watchlist_id": "1f9598a6a5805408"
+      },
+      "snapshot_count": 2
+    }
+  ],
+  "summary": {
+    "cases_created": 5,
+    "cases_updated": 2,
+    "cooldown_suppressed": 3,
+    "duplicate_cases_prevented": 2,
+    "future_evidence_total": 0,
+    "provider_failures": 1,
+    "scenario_count": 10
+  }
+}

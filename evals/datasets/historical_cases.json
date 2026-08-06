@@ -1,0 +1,90 @@
+[
+  {
+    "case_id": "aapl_recent_control_2026_07_01",
+    "symbol": "AAPL",
+    "as_of": "2026-07-01T00:00:00Z",
+    "lookback_days": 60,
+    "case_type": "no_material_event_control",
+    "known_public_information": ["SEC companyfacts available through filings accepted on or before as_of", "Daily bars only if available_at <= as_of"],
+    "expected_major_events": [],
+    "expected_unknowns": [],
+    "forbidden_future_information": ["market bars with available_at after 2026-07-01T00:00:00Z", "news published after 2026-07-01T00:00:00Z", "filings accepted after 2026-07-01T00:00:00Z"]
+  },
+  {
+    "case_id": "aapl_earnings_window_2025_11_01",
+    "symbol": "AAPL",
+    "as_of": "2025-11-01T00:00:00Z",
+    "lookback_days": 90,
+    "case_type": "major_filing",
+    "known_public_information": ["Only filings/facts available on or before as_of"],
+    "expected_major_events": ["new_filing"],
+    "expected_unknowns": [],
+    "forbidden_future_information": ["2026 fiscal data", "news after 2025-11-01T00:00:00Z"]
+  },
+  {
+    "case_id": "aapl_volume_window_2026_06_15",
+    "symbol": "AAPL",
+    "as_of": "2026-06-15T00:00:00Z",
+    "lookback_days": 45,
+    "case_type": "abnormal_volume",
+    "known_public_information": ["Daily bars with one-day availability lag"],
+    "expected_major_events": ["abnormal_volume"],
+    "expected_unknowns": [],
+    "forbidden_future_information": ["bars available after 2026-06-15T00:00:00Z"]
+  },
+  {
+    "case_id": "nvda_market_blocked_2026_07_01",
+    "symbol": "NVDA",
+    "as_of": "2026-07-01T00:00:00Z",
+    "lookback_days": 60,
+    "case_type": "provider_coverage_gap",
+    "known_public_information": ["SEC and Yahoo RSS may be available", "MarketData.app no-token mode may be unauthorized"],
+    "expected_major_events": [],
+    "expected_unknowns": ["Market data"],
+    "forbidden_future_information": ["future market bars", "future filings", "future news"]
+  },
+  {
+    "case_id": "msft_market_blocked_2026_07_01",
+    "symbol": "MSFT",
+    "as_of": "2026-07-01T00:00:00Z",
+    "lookback_days": 60,
+    "case_type": "provider_coverage_gap",
+    "known_public_information": ["SEC and Yahoo RSS may be available", "MarketData.app no-token mode may be unauthorized"],
+    "expected_major_events": [],
+    "expected_unknowns": ["Market data"],
+    "forbidden_future_information": ["future market bars", "future filings", "future news"]
+  },
+  {
+    "case_id": "aapl_historical_filing_2024_11_05",
+    "symbol": "AAPL",
+    "as_of": "2024-11-05T00:00:00Z",
+    "lookback_days": 120,
+    "case_type": "earnings_or_annual_filing",
+    "known_public_information": ["2024 filings available by as_of only"],
+    "expected_major_events": ["new_filing"],
+    "expected_unknowns": [],
+    "forbidden_future_information": ["2025 and 2026 filings/facts/news"]
+  },
+  {
+    "case_id": "nvda_historical_filing_2025_03_01",
+    "symbol": "NVDA",
+    "as_of": "2025-03-01T00:00:00Z",
+    "lookback_days": 120,
+    "case_type": "earnings_or_annual_filing",
+    "known_public_information": ["NVDA SEC facts and filings accepted by as_of"],
+    "expected_major_events": ["new_filing"],
+    "expected_unknowns": ["Market data"],
+    "forbidden_future_information": ["filings accepted after 2025-03-01T00:00:00Z", "facts filed after 2025-03-01T00:00:00Z"]
+  },
+  {
+    "case_id": "aapl_news_burst_2026_07_06",
+    "symbol": "AAPL",
+    "as_of": "2026-07-06T00:00:00Z",
+    "lookback_days": 60,
+    "case_type": "news_burst",
+    "known_public_information": ["Recent Yahoo RSS items in lookback window"],
+    "expected_major_events": ["news_burst"],
+    "expected_unknowns": [],
+    "forbidden_future_information": ["news published after 2026-07-06T00:00:00Z"]
+  }
+]

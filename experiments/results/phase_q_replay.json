@@ -1,0 +1,34 @@
+{
+ "replay_days": 60,
+ "period": [
+  "2026-04-07",
+  "2026-07-03"
+ ],
+ "event_counts": {
+  "thesis": 105,
+  "position": 597,
+  "decision": 187,
+  "fill": 187,
+  "order": 187,
+  "sizing": 197,
+  "risk": 202,
+  "proposal": 202,
+  "ensemble": 135,
+  "research": 135,
+  "candidate": 135,
+  "exit": 82,
+  "quant": 60,
+  "scan": 60,
+  "conflict": 12,
+  "no_action": 17
+ },
+ "future_bars_served": 0,
+ "n_quant_buys": 105,
+ "n_quant_reduces": 52,
+ "n_conflicts": 12,
+ "fills": 187,
+ "final_equity": 973940.5214,
+ "attribution_realized_pnl": {
+  "signal_only": -44192.996059324185
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "replay_days": 3,
+ "universe_size": 7,
+ "events": {
+  "thesis": 8,
+  "position": 12,
+  "decision": 8,
+  "fill": 8,
+  "order": 8,
+  "sizing": 8,
+  "risk": 8,
+  "proposal": 8,
+  "fusion": 8,
+  "research": 8,
+  "candidate": 8,
+  "quant": 3,
+  "scan": 3
+ },
+ "future_bars_served": 0,
+ "elapsed_s": 589.3,
+ "final_equity": 990255.5570799998,
+ "llm_stats": {
+  "calls": 8,
+  "tokens": 13483,
+  "latency_ms_total": 974527.5950431824,
+  "failures": 3,
+  "fallback_cycles": 3,
+  "vetoes": 8,
+  "confirmations": 0,
+  "reduces_triggered": 0
+ },
+ "n_llm_buys": 0,
+ "n_llm_reduces": 0
+}

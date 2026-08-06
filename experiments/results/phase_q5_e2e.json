@@ -1,0 +1,21 @@
+{
+  "conflict": {
+    "e2e": "conflict",
+    "status": "PASS",
+    "latency_s": 206.4,
+    "llm_direction": "neutral",
+    "bull_strength": 0.45,
+    "bear_strength": 0.6,
+    "contradiction_score": 1.0,
+    "quant_bear_x_llm": {
+      "conflict_state": "low_evidence",
+      "final_signal": "no_action",
+      "explanation": "证据不足且量化不强：观望"
+    },
+    "quant_bull_x_llm_bear": {
+      "conflict_state": "low_evidence",
+      "final_signal": "buy",
+      "explanation": "LLM 证据薄弱（citation-damped conf 0.34），不足以确认或否决：按量化信号 75% 目标执行"
+    }
+  }
+}

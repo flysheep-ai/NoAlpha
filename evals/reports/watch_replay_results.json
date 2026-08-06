@@ -1,0 +1,222 @@
+{
+  "aggregate": {
+    "cases_created": 2,
+    "cases_updated": 4,
+    "cooldown_suppressed": 2,
+    "duplicate_cases_prevented": 4,
+    "future_evidence_total": 0,
+    "investigations_started": 6,
+    "provider_failures": 8,
+    "scan_count": 24,
+    "trigger_candidates": 59,
+    "trigger_clusters": 55
+  },
+  "results": [
+    {
+      "as_of": "2026-07-01T00:00:00Z",
+      "case_id": "aapl_recent_control_2026_07_01",
+      "duplicate_case_rate": 0.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [
+          "377be7831646b2b6",
+          "ca1df8ef9aa3585f"
+        ],
+        "cases_created": 2,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [
+          "MSFT",
+          "NVDA"
+        ],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 2,
+        "provider_failures": 2,
+        "scan_count": 3,
+        "scan_id": "3d64c653-16eb-4756-b545-019e4298d37f",
+        "scanned_at": "2026-07-01T00:00:00Z",
+        "trigger_candidates": 13,
+        "trigger_clusters": 12,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "AAPL"
+    },
+    {
+      "as_of": "2025-11-01T00:00:00Z",
+      "case_id": "aapl_earnings_window_2025_11_01",
+      "duplicate_case_rate": 0.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 3,
+        "scan_id": "0614e805-f4a6-40b7-85ba-2b128da349f5",
+        "scanned_at": "2025-11-01T00:00:00Z",
+        "trigger_candidates": 0,
+        "trigger_clusters": 0,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "AAPL"
+    },
+    {
+      "as_of": "2026-06-15T00:00:00Z",
+      "case_id": "aapl_volume_window_2026_06_15",
+      "duplicate_case_rate": 0.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 3,
+        "scan_id": "2941865f-461b-4cb8-84ed-a93206b2838b",
+        "scanned_at": "2026-06-15T00:00:00Z",
+        "trigger_candidates": 0,
+        "trigger_clusters": 0,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "AAPL"
+    },
+    {
+      "as_of": "2026-07-01T00:00:00Z",
+      "case_id": "nvda_market_blocked_2026_07_01",
+      "duplicate_case_rate": 1.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [
+          "ca1df8ef9aa3585f"
+        ],
+        "cases_created": 0,
+        "cases_updated": 1,
+        "cooldown_suppressed": 1,
+        "degraded_symbols": [
+          "MSFT",
+          "NVDA"
+        ],
+        "duplicate_cases_prevented": 1,
+        "investigations_started": 1,
+        "provider_failures": 2,
+        "scan_count": 3,
+        "scan_id": "6a96a9cf-a4ad-47d1-a43c-fa4802547efe",
+        "scanned_at": "2026-07-01T00:00:00Z",
+        "trigger_candidates": 13,
+        "trigger_clusters": 12,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "NVDA"
+    },
+    {
+      "as_of": "2026-07-01T00:00:00Z",
+      "case_id": "msft_market_blocked_2026_07_01",
+      "duplicate_case_rate": 1.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [
+          "ca1df8ef9aa3585f"
+        ],
+        "cases_created": 0,
+        "cases_updated": 1,
+        "cooldown_suppressed": 1,
+        "degraded_symbols": [
+          "MSFT",
+          "NVDA"
+        ],
+        "duplicate_cases_prevented": 1,
+        "investigations_started": 1,
+        "provider_failures": 2,
+        "scan_count": 3,
+        "scan_id": "897506ff-1202-4f41-8a26-7a9851d39a0a",
+        "scanned_at": "2026-07-01T00:00:00Z",
+        "trigger_candidates": 13,
+        "trigger_clusters": 12,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "MSFT"
+    },
+    {
+      "as_of": "2024-11-05T00:00:00Z",
+      "case_id": "aapl_historical_filing_2024_11_05",
+      "duplicate_case_rate": 0.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 3,
+        "scan_id": "21df8d4b-e47e-4a4d-b557-e8fcf4a9c4d1",
+        "scanned_at": "2024-11-05T00:00:00Z",
+        "trigger_candidates": 0,
+        "trigger_clusters": 0,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "AAPL"
+    },
+    {
+      "as_of": "2025-03-01T00:00:00Z",
+      "case_id": "nvda_historical_filing_2025_03_01",
+      "duplicate_case_rate": 0.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [],
+        "cases_created": 0,
+        "cases_updated": 0,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [],
+        "duplicate_cases_prevented": 0,
+        "investigations_started": 0,
+        "provider_failures": 0,
+        "scan_count": 3,
+        "scan_id": "8f89aa81-1944-4c3d-b767-872709ad0e6d",
+        "scanned_at": "2025-03-01T00:00:00Z",
+        "trigger_candidates": 0,
+        "trigger_clusters": 0,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "NVDA"
+    },
+    {
+      "as_of": "2026-07-06T00:00:00Z",
+      "case_id": "aapl_news_burst_2026_07_06",
+      "duplicate_case_rate": 1.0,
+      "future_evidence_total": 0,
+      "summary": {
+        "case_ids": [
+          "377be7831646b2b6",
+          "ca1df8ef9aa3585f"
+        ],
+        "cases_created": 0,
+        "cases_updated": 2,
+        "cooldown_suppressed": 0,
+        "degraded_symbols": [
+          "MSFT",
+          "NVDA"
+        ],
+        "duplicate_cases_prevented": 2,
+        "investigations_started": 2,
+        "provider_failures": 2,
+        "scan_count": 3,
+        "scan_id": "7bcf195d-127e-409f-8369-128558ed5b5e",
+        "scanned_at": "2026-07-06T00:00:00Z",
+        "trigger_candidates": 20,
+        "trigger_clusters": 19,
+        "watchlist_id": "cbd35d88ed648814"
+      },
+      "symbol": "AAPL"
+    }
+  ]
+}

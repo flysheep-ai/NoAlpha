@@ -1,0 +1,54 @@
+{
+ "replay_days": 5,
+ "period": [
+  "2026-06-29",
+  "2026-07-03"
+ ],
+ "events": {
+  "conflict": 9,
+  "fusion": 25,
+  "research": 25,
+  "candidate": 25,
+  "thesis": 16,
+  "position": 39,
+  "decision": 18,
+  "fill": 18,
+  "order": 18,
+  "sizing": 18,
+  "risk": 18,
+  "proposal": 18,
+  "quant": 5,
+  "scan": 5,
+  "exit": 2
+ },
+ "future_bars_served": 0,
+ "elapsed_s": 1.3,
+ "final_equity": 1004581.5204999999,
+ "llm_stats": {
+  "calls": 25,
+  "tokens": 0,
+  "latency_ms_total": 0.0,
+  "failures": 25,
+  "fallback_cycles": 25,
+  "vetoes": 25,
+  "confirmations": 0,
+  "reduces_triggered": 0
+ },
+ "llm_feature_status": {
+  "state": "COLLECTING",
+  "pit_safe_snapshots": 0,
+  "matured_snapshots": 0,
+  "unique_dates": 0,
+  "unique_instruments": 0,
+  "model_distribution": {},
+  "thresholds": {
+   "min_snapshots": 500,
+   "min_unique_dates": 60,
+   "min_unique_instruments": 15
+  },
+  "training_allowed": false
+ },
+ "n_llm_buys": 0,
+ "n_llm_reduces": 0,
+ "n_fusion_events": 25
+}

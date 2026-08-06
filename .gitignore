@@ -1,0 +1,36 @@
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Local runtime state and secrets
+.cache/
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
+
+# Build and coverage output
+dist/
+build/
+coverage/
+htmlcov/
+.coverage

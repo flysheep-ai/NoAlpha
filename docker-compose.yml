@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./.cache:/app/.cache
+    # Secrets are injected at run time, never baked into the image. Optional so
+    # the stack still starts with no .env present (deterministic mode).
+    env_file:
+      - path: .env
+        required: false
+
+  console:
+    image: node:22-slim
+    working_dir: /app
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    # The vite dev proxy targets 127.0.0.1:8000 by default; inside compose the
+    # backend is another service, so point it at the api container.
+    environment:
+      - VITE_API_TARGET=http://api:8000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
