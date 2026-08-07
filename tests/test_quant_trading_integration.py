@@ -50,8 +50,10 @@ def build_world(tmp_path, n_secs=8, n=260):
     v = registry.register(ModelVersion(name="simple_momentum", feature_ids=ds.feature_columns,
                                        label_id="excess_return_5d:v1", horizon_days=5,
                                        market_scope="US"), model)
+    # An ACTIVE model is the fixture this integration test needs; it makes no
+    # claim about the model's quality, so the bypass is explicit and recorded.
     for step in [ModelStatus.VALIDATED, ModelStatus.SHADOW, ModelStatus.PAPER, ModelStatus.ACTIVE]:
-        registry.promote(v.model_id, step)
+        registry.promote(v.model_id, step, override_reason="integration test fixture")
 
     feed = ReplayMarketFeed(history)
     feed.set_date(history["105.SYM1"][-1]["time"][:10])
@@ -123,7 +125,7 @@ def test_quant_driven_reduce_on_rank_deterioration(tmp_path):
 def test_quant_llm_conflict_blocks_trade(tmp_path, monkeypatch):
     loop, store, broker, session = build_world(tmp_path)
 
-    def bearish_research(candidate, feed):
+    def bearish_research(candidate, feed, quant_view=None):
         return ResearchOutcome(
             thesis=f"{candidate.symbol} 深度研究：多项负面证据",
             bull_case=[], bear_case=["盈利预警", "行业逆风", "监管风险"],

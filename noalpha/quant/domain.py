@@ -103,6 +103,10 @@ class DatasetVersion:
     n_rows: int = 0
     n_features: int = 0
     survivorship_bias_risk: bool = True   # universe is today's list, not PIT constituents
+    # Content hash of the RAW bars. Without it, dataset_id describes the shape
+    # of a dataset rather than its contents.
+    raw_data_hash: str = ""
+    data_snapshot: dict[str, Any] = field(default_factory=dict)
     content_hash: str = ""
     created_at: str = field(default_factory=_now)
 
@@ -128,6 +132,12 @@ class QuantExperiment:
     code_version: str = ""
     notes: str = ""
     status: str = "created"            # created | running | done | failed
+    # Full rerun provenance (see quant/provenance.py). `provenance_missing`
+    # names anything that was never captured, so an unreproducible result
+    # reads as unreproducible instead of merely quiet.
+    provenance: dict[str, Any] = field(default_factory=dict)
+    provenance_missing: list[str] = field(default_factory=list)
+    reproducible: bool = False
     created_at: str = field(default_factory=_now)
 
     def to_dict(self) -> dict[str, Any]:

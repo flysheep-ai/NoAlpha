@@ -85,6 +85,56 @@ export interface SystemTruth {
     research: TruthComponent; risk: TruthComponent; virtual_broker: TruthComponent;
   };
   activity: { stage: string; target: string; cycle: number };
+  // Who actually chose this cycle's research candidates: the ACTIVE quant
+  // model's ranking, or the momentum heuristic fallback.
+  candidate_selection?: {
+    source: string; status: "QUANT_LED" | "HEURISTIC_FALLBACK" | "NOT_RUN";
+    reason: string; selected: number; rejected: number;
+    policy?: Record<string, any>;
+  };
+  // Whether the three-arm comparison can support a claim yet.
+  shadow?: {
+    status: "SAMPLE_OK" | "INSUFFICIENT_SAMPLE";
+    cycles: number; decision_changes: number;
+    required_cycles: number; required_decision_changes: number;
+    sufficient: boolean; verdict: string;
+  };
+  // The trading-day counters the hard daily limits are gated on.
+  risk_state?: {
+    trading_date: string; start_of_day_equity: number; equity: number;
+    realized_pnl_today: number; realized_daily_loss_pct: number;
+    equity_daily_drawdown: number; session_drawdown: number;
+    orders_today: number; rollovers: number;
+  };
+}
+
+export interface ShadowArmMetrics {
+  arm: string; cycles: number; final_equity: number;
+  cumulative_return: number; mean_cycle_return: number;
+  sharpe_per_cycle: number | null; max_drawdown: number;
+  total_turnover: number; total_cost: number; cost_drag: number; trades: number;
+}
+export interface ShadowAttribution {
+  session_id: string;
+  verdict: "SAMPLE_OK" | "INSUFFICIENT_SAMPLE" | "LLM_UNAVAILABLE";
+  verdict_detail?: string;
+  llm_active?: boolean;
+  sample: {
+    cycles: number; decision_changes: number;
+    required_cycles: number; required_decision_changes: number; sufficient: boolean;
+  };
+  decision_attribution: {
+    decisions_total: number; decision_change_count: number;
+    decision_change_rate: number; by_change_type: Record<string, number>;
+    llm_veto_count: number; llm_reduce_count: number; llm_confirmation_count: number;
+  };
+  portfolio_attribution: {
+    arms: Record<string, ShadowArmMetrics>;
+    llm_vs_quant: { return_delta: number; drawdown_delta: number; turnover_delta: number; cost_delta: number };
+    llm_vs_deterministic: { return_delta: number; drawdown_delta: number; turnover_delta: number; cost_delta: number };
+  };
+  llm_cost: Record<string, number | null>;
+  fairness: Record<string, any>;
 }
 export interface ProposalRow {
   proposal_id: string; symbol: string; action: string; target_weight: number;
@@ -184,6 +234,7 @@ export const api = {
     request<{ proposal_id: string; chain: DecisionEventInfo[] }>(`/api/v1/trading/sessions/${id}/trades/${proposalId}`),
   tradingDecisions: (id: string) => request<{ items: DecisionStory[] }>(`/api/v1/trading/sessions/${id}/decisions`),
   tradingSystemTruth: (id: string) => request<SystemTruth>(`/api/v1/trading/sessions/${id}/system-truth`),
+  tradingShadow: (id: string) => request<ShadowAttribution>(`/api/v1/trading/sessions/${id}/shadow`),
   tradingProposals: (id: string, limit = 50) => request<{ items: ProposalRow[] }>(`/api/v1/trading/sessions/${id}/proposals?limit=${limit}`),
   tradingTheses: (id: string, symbol?: string) =>
     request<{ items: ThesisInfo[] }>(`/api/v1/trading/sessions/${id}/theses${symbol ? `?symbol=${symbol}` : ""}`),

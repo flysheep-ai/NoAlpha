@@ -342,6 +342,26 @@ def register_trading_routes(app: FastAPI, state_dir: Path, admin_dependency: Any
             return snap[0]["payload"]
         return loop.system_truth()
 
+    @app.get("/api/v1/trading/sessions/{session_id}/shadow")
+    def session_shadow(session_id: str) -> dict[str, Any]:
+        """Three-arm attribution.
+
+        `verdict` is the only field a UI may render as a conclusion. The
+        numeric deltas are facts about three real counterfactual books, but
+        they do not become a claim about incremental LLM alpha until
+        `sample.sufficient` is true.
+        """
+        _get_session(session_id)
+        loop = _get_or_restore_loop(session_id)
+        report = loop.shadow.attribution()
+        report["llm_active"] = loop.trading_research is not None
+        if not report["llm_active"]:
+            report["verdict"] = "LLM_UNAVAILABLE"
+            report["verdict_detail"] = (
+                "Arm C ran Arm B's deterministic decisions, so no incremental-LLM "
+                "question was asked in this session.")
+        return report
+
     @app.get("/api/v1/trading/sessions/{session_id}/decisions")
     def session_decisions(session_id: str) -> dict[str, Any]:
         """Decision stories: one entry per completed trade (grouped by proposal_id)."""

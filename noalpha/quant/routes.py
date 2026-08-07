@@ -4,6 +4,7 @@ frontend renders predictions as predictions, never as facts (第九十六条).""
 from __future__ import annotations
 
 import json
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from noalpha.quant.domain import ModelStatus
 from noalpha.quant.experiment import ExperimentStore
 from noalpha.quant.features import FACTOR_DEFINITIONS, FEATURE_DEFINITIONS
 from noalpha.quant.labels import LABEL_DEFINITIONS
+from noalpha.quant.promotion import PromotionEvidenceBundle, PromotionPolicy
 from noalpha.quant.registry import PromotionError, QuantModelRegistry
 
 
@@ -29,11 +31,17 @@ def register_quant_routes(app: FastAPI, quant_root: str | Path = ".cache/quant")
             "models_total": len(models),
             "active_models": [{k: m[k] for k in
                                ("model_id", "name", "version", "market_scope",
-                                "horizon_days", "label_id", "promoted_at")}
+                                "horizon_days", "label_id", "promoted_at",
+                                "promotion_evidence")}
                               for m in active],
             "experiments_total": len(experiments.load_all()),
             "feature_count": len(FEATURE_DEFINITIONS),
             "factor_count": len(FACTOR_DEFINITIONS),
+            # Which models are live on unaudited promotions. Surfaced in the
+            # overview rather than buried, because an ACTIVE model with no
+            # recorded evidence is the single most misleading state the
+            # registry can be in.
+            "promotion_audit": registry.audit_promotions(),
         }
 
     @app.get("/api/quant/models")
@@ -41,12 +49,33 @@ def register_quant_routes(app: FastAPI, quant_root: str | Path = ".cache/quant")
         return {"models": registry.list_models()}
 
     @app.post("/api/quant/models/{model_id}/promote/{status}")
-    def promote_model(model_id: str, status: str) -> dict[str, Any]:
+    def promote_model(model_id: str, status: str,
+                      body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Promote one stage. The body carries the PromotionEvidenceBundle;
+        an empty body means "no evidence", which fails every gate — that is
+        the intended behaviour, not an inconvenience."""
+        body = body or {}
+        known = {f.name for f in fields(PromotionEvidenceBundle)}
+        evidence = PromotionEvidenceBundle(
+            **{k: v for k, v in (body.get("evidence") or {}).items() if k in known})
         try:
-            record = registry.promote(model_id, ModelStatus(status))
+            record = registry.promote(model_id, ModelStatus(status), evidence,
+                                      override_reason=str(body.get("override_reason") or ""))
         except (PromotionError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         return {"model": record}
+
+    @app.get("/api/quant/models/{model_id}/promotion-requirements")
+    def promotion_requirements(model_id: str) -> dict[str, Any]:
+        try:
+            return registry.promotion_requirements(model_id)
+        except PromotionError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/api/quant/promotion-policy")
+    def promotion_policy() -> dict[str, Any]:
+        policy = PromotionPolicy()
+        return {"version": policy.version, "stages": policy.all_requirements()}
 
     @app.get("/api/quant/experiments")
     def quant_experiments() -> dict[str, Any]:

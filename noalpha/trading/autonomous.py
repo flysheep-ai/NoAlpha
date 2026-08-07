@@ -43,12 +43,17 @@ from noalpha.trading.research_fusion import (
     FusionPolicy, TradingResearchService, default_trading_research_service,
     snapshot_to_signal,
 )
-from noalpha.trading.shadow import DecisionDelta, ShadowArena
+from noalpha.trading.candidate_policy import CandidateSelectionPolicy
+from noalpha.trading.shadow import (
+    ArmDecision, DecisionDelta, ShadowArena, ShadowPortfolioPolicy, classify_change,
+)
 from noalpha.trading.domain import Order, OrderSide, OrderStatus, OrderType
 from noalpha.trading.proposal import (
     DecisionMode, ExitReason, TradeAction, TradeProposal, TradeRationale,
 )
-from noalpha.trading.risk import PositionSizingEngine, PreTradeRiskEngine
+from noalpha.trading.risk import (
+    PositionSizingEngine, PreTradeRiskEngine, TradingDayRiskState,
+)
 from noalpha.trading.session import DecisionEvent, SessionStatus, TradingSession, TradingStore
 from noalpha.trading.thesis import InvestmentThesis, ThesisStatus
 from noalpha.trading.trading_agents import TradingAgentsOrchestrator, TradingAgentsReport
@@ -204,10 +209,15 @@ class Candidate:
     secid: str
     symbol: str
     name: str
-    score: float
+    score: float                      # heuristic momentum score (a FEATURE, not a gate)
     signals: dict[str, float]
     quote: dict[str, Any]
     reason: str = ""
+    # ── selection provenance (set by CandidateSelectionPolicy) ──
+    candidate_source: str = ""        # quant | heuristic_fallback
+    quant_rank: int | None = None
+    quant_strength: float | None = None
+    selection_reason: str = ""
 
 
 @dataclass
@@ -261,7 +271,8 @@ class DecisionEngine:
         candidates.sort(key=lambda c: c.score, reverse=True)
         return candidates, skipped
 
-    def research(self, candidate: Candidate, feed: MarketFeed) -> ResearchOutcome:
+    def research(self, candidate: Candidate, feed: MarketFeed,
+                 quant_view: dict[str, Any] | None = None) -> ResearchOutcome:
         bars = feed.get_daily_bars(candidate.secid, 60)
         s = candidate.signals
         q = candidate.quote
@@ -330,12 +341,18 @@ class DecisionEngine:
             self._t("放量下跌（量比≥2且当日跌幅≥3%）",
                     "high-volume decline (volume ratio ≥2 and day change ≤ −3%)"),
         ]
+        # The Quant Analyst role must read the ACTIVE model's real view. Passing
+        # nothing here made it silently fall back to the heuristic candidate
+        # score while still calling itself "quant_analyst" — a名实不符 the
+        # SYSTEM TRUTH principle forbids. When quant genuinely has no view the
+        # role reports status=degraded and says so.
         agent_report = self.agents.run(
             symbol=candidate.symbol,
             name=candidate.name,
             score=candidate.score,
             signals=candidate.signals,
             evidence_ids=[e["evidence_id"] for e in evidence],
+            quant_view=quant_view,
         )
         if agent_report.trader_plan:
             confidence = min(confidence, max(0.1, agent_report.trader_plan.confidence))
@@ -577,6 +594,10 @@ class AutonomousTradingLoop:
             max_position_weight=profile["max_position_weight"],
             max_daily_loss_pct=profile["max_daily_loss_pct"],
         )
+        # Restore today's risk counters. Without this a restart would re-anchor
+        # start-of-day equity and realized PnL, clearing the daily loss limit —
+        # a hard control that a crash loop could bypass by simply crashing.
+        self.risk.day_state = TradingDayRiskState.from_dict(session.risk_day_state)
         self.sizing = PositionSizingEngine(max_position_weight=profile["max_position_weight"])
         self.theses: dict[str, InvestmentThesis] = {}
         self._secid_by_symbol: dict[str, str] = {}
@@ -600,7 +621,21 @@ class AutonomousTradingLoop:
             except Exception as exc:
                 self.llm_init_error = str(exc)
                 logger.exception("trading research service unavailable")
-        self.shadow = ShadowArena(session.session_id, session.initial_capital)
+        # Candidate discovery: quant-led when an ACTIVE model is available, with
+        # the old momentum heuristic demoted to an explicit fallback.
+        self.candidate_policy = CandidateSelectionPolicy(
+            heuristic_threshold=profile["buy_score_threshold"])
+        self.last_selection: dict[str, Any] = {}
+        # Three independent counterfactual books, sized by ONE shared policy so
+        # only the DECISION differs between arms.
+        self.shadow = ShadowArena(
+            session.session_id, session.initial_capital,
+            policy=ShadowPortfolioPolicy(base_weight=profile["base_target_weight"],
+                                         max_weight=profile["max_position_weight"]))
+        # per-cycle scratch: symbol -> ArmDecision per arm, and the ONE price map
+        self._arm_decisions: dict[str, dict[str, ArmDecision]] = {}
+        self._cycle_prices: dict[str, float] = {}
+        self._cycle_trading_date: str = ""
         # ── system truth: what the loop is doing / which brains are real ──
         self._proposal_cooldown: dict[str, int] = {}   # symbol -> cycle of last BUY proposal
         self.current_stage: str = "idle"               # scan/quant/positions/research/…
@@ -715,6 +750,12 @@ class AutonomousTradingLoop:
         if self.trading_research is not None:
             self.trading_research.budget.new_cycle()
         summary: dict[str, Any] = {"cycle": cycle, "actions": [], "no_actions": []}
+        # Reset the per-cycle counterfactual scratch. Every arm decision and
+        # every shadow mark this cycle comes from the quotes captured below —
+        # one scan, one price map, three arms.
+        self._arm_decisions = {}
+        self._cycle_prices = {}
+        self._cycle_trading_date = ""
 
         universe = self._universe()
         self.current_stage = "scan"
@@ -741,6 +782,15 @@ class AutonomousTradingLoop:
             self._emit("scan", self._t(f"跳过 {msg}", f"Skipped {msg}"), payload={"skipped": msg})
         for c in candidates:
             self._secid_by_symbol[c.symbol] = c.secid
+            # ONE price map, captured from the SAME quotes the decisions see.
+            acct_price, _ = self._account_price(c.quote)
+            if acct_price > 0:
+                self._cycle_prices[c.symbol] = acct_price
+            # The trading date comes from the DATA, not the wall clock, so a
+            # historical replay rolls the risk day exactly like live trading.
+            stamp = str(c.quote.get("timestamp") or "")[:10]
+            if stamp > self._cycle_trading_date:
+                self._cycle_trading_date = stamp
 
         # Stage 1.5: quant inference — cross-sectional ranking over the universe.
         # When an ACTIVE model exists, its ranking (not the heuristic score)
@@ -791,9 +841,27 @@ class AutonomousTradingLoop:
                                 "universe_size": len(quant.predictions),
                                 "skipped": quant.skipped[:10],
                                 "as_of": quant.as_of})
-            # rank order replaces the heuristic order; heuristic kept as tiebreak
-            strength = {s.symbol: s.strength for s in quant.signals}
-            candidates.sort(key=lambda c: (strength.get(c.symbol, 0.0), c.score), reverse=True)
+        # ── Stage 1.6: candidate selection ──
+        # Who gets to decide which names reach Research. With an ACTIVE quant
+        # model that is the model's cross-sectional ranking; the momentum
+        # heuristic is a fallback only, and the choice is recorded as real
+        # provenance rather than implied by the log wording.
+        predictions_by_symbol = {p.symbol: p for p in quant.predictions}
+        selection = self.candidate_policy.select(
+            candidates, quant_available=quant_ok,
+            signals_by_symbol=signal_by_symbol,
+            predictions_by_symbol=predictions_by_symbol,
+            quant_error=quant.error)
+        candidates = selection.selected
+        self.last_selection = selection.to_dict()
+        summary["candidate_source"] = selection.source
+        self._emit("selection", self._t(
+            f"候选筛选：{selection.source}（入选 {len(selection.selected)}，"
+            f"淘汰 {len(selection.rejected)}）— {selection.reason}",
+            f"Candidate selection: {selection.source} "
+            f"({len(selection.selected)} selected, {len(selection.rejected)} rejected) — "
+            f"{selection.reason}"),
+                   payload=self.last_selection)
 
         # Position management first (existing holdings get checked every cycle)
         self.current_stage = "position_review"
@@ -807,6 +875,7 @@ class AutonomousTradingLoop:
             acct_price, _fx = self._account_price(quote)
             if acct_price > 0:
                 self.broker.update_market_prices({symbol: acct_price})
+                self._cycle_prices.setdefault(symbol, acct_price)
             thesis = self.theses.get(position.active_thesis_id)
             proposal, verdict = self.engine.manage_position(symbol, position, quote, signals, thesis)
             # Quant-driven exit (第八十七/八十八条): rule exits (stop loss etc.)
@@ -876,8 +945,9 @@ class AutonomousTradingLoop:
                 break
             if cand.symbol in acted_symbols:
                 continue
-            if cand.score < threshold:
-                continue
+            # NOTE: no `cand.score < threshold` gate here any more. Candidate
+            # admission is owned by CandidateSelectionPolicy above, which uses
+            # the quant ranking whenever an ACTIVE model is available.
             # ── dedup / cooldown gates（第二十五条）──
             last_prop_cycle = self._proposal_cooldown.get(cand.symbol)
             if last_prop_cycle is not None and cycle - last_prop_cycle < PROPOSAL_COOLDOWN_CYCLES:
@@ -915,23 +985,59 @@ class AutonomousTradingLoop:
             tradable, freshness = self._tradable(cand.quote)
             if not tradable:
                 self._emit("no_action", self._t(
-                    f"{cand.symbol} 达到候选阈值(score={cand.score:.2f})但市场不可交易"
+                    f"{cand.symbol} 已入选候选（{cand.selection_reason}）但市场不可交易"
                     f"（freshness={freshness}）",
-                    f"{cand.symbol} cleared the candidate threshold (score={cand.score:.2f}) but the "
+                    f"{cand.symbol} was selected ({cand.selection_reason}) but the "
                     f"market is not tradable (freshness={freshness})"),
                            secid=cand.secid, symbol=cand.symbol,
-                           payload={"reason": "market_not_tradable", "freshness": freshness, "score": cand.score})
+                           payload={"reason": "market_not_tradable", "freshness": freshness,
+                                    "score": cand.score,
+                                    "candidate_source": cand.candidate_source})
                 summary["no_actions"].append(f"{cand.symbol}:market_not_tradable")
                 continue
-            self._emit("candidate", self._t(f"{cand.symbol} 入选研究候选：{cand.reason}",
-                                            f"{cand.symbol} selected for research: {cand.reason}"),
+            self._emit("candidate", self._t(
+                f"{cand.symbol} 入选研究候选（来源 {cand.candidate_source}）：{cand.selection_reason}",
+                f"{cand.symbol} selected for research (source {cand.candidate_source}): "
+                f"{cand.selection_reason}"),
                        secid=cand.secid, symbol=cand.symbol,
-                       payload={"score": cand.score, "signals": cand.signals})
+                       payload={"score": cand.score, "signals": cand.signals,
+                                "candidate_source": cand.candidate_source,
+                                "quant_rank": cand.quant_rank,
+                                "quant_strength": cand.quant_strength,
+                                "selection_reason": cand.selection_reason,
+                                "heuristic_reason": cand.reason})
             researched += 1
             self.current_target = f"{cand.name}({cand.symbol})"
 
+            qsig = signal_by_symbol.get(cand.symbol)
+            pred = predictions_by_symbol.get(cand.symbol)
+            quant_view = ({"rank": pred.predicted_rank, "universe_size": pred.universe_size,
+                           "predicted_return": pred.predicted_return,
+                           "probability_up": pred.probability_up,
+                           "horizon_days": pred.horizon_days,
+                           "confidence": qsig.confidence if qsig else None,
+                           "model": (self.quant_result.model.get("display", "")
+                                     if self.quant_result else ""),
+                           "model_id": pred.model_version}
+                          if pred is not None else None)
+
+            # ── Arm A: quant only ──
+            # Recorded BEFORE any research runs. If it were recorded after the
+            # deterministic-confidence gate below, Arm B's research would be
+            # silently suppressing Arm A's decisions and the comparison would
+            # no longer be a counterfactual.
+            quant_long = bool(qsig and qsig.direction == SignalDirection.LONG)
+            quant_strength = float(getattr(qsig, "strength", 0.0) or 0.0)
+            arm_a_buy = quant_long and quant_strength >= 0.6
+            self._record_arm_decision(ArmDecision(
+                arm="quant_only", symbol=cand.symbol,
+                action="buy" if arm_a_buy else "no_action",
+                size_multiplier=1.0, source="quant_signal",
+                detail={"direction": qsig.direction.value if qsig else "missing",
+                        "strength": quant_strength}))
+
             # ── deterministic research (Arm B baseline, always computed) ──
-            research = self.engine.research(cand, self.feed)
+            research = self.engine.research(cand, self.feed, quant_view=quant_view)
             self._emit("research", self._t(
                 f"{cand.symbol} 研究完成：confidence={research.confidence:.2f}（deterministic 信号研究）",
                 f"{cand.symbol} research complete: confidence={research.confidence:.2f} "
@@ -953,6 +1059,12 @@ class AutonomousTradingLoop:
                            secid=cand.secid, symbol=cand.symbol,
                            payload=agent_payload)
             if research.confidence < 0.5:
+                # Research-dependent arms stand down; Arm A already decided.
+                for arm in ("deterministic_hybrid", "llm_hybrid"):
+                    self._record_arm_decision(ArmDecision(
+                        arm=arm, symbol=cand.symbol, action="no_action",
+                        source="research_confidence_gate",
+                        detail={"confidence": research.confidence, "floor": 0.5}))
                 self._emit("no_action", self._t(
                     f"{cand.symbol} 研究置信度 {research.confidence:.2f} < 0.5，放弃",
                     f"{cand.symbol} research confidence {research.confidence:.2f} < 0.5; abandoned"),
@@ -960,10 +1072,6 @@ class AutonomousTradingLoop:
                            payload={"reason": "low_confidence", "confidence": research.confidence})
                 summary["no_actions"].append(f"{cand.symbol}:low_confidence")
                 continue
-
-            qsig = signal_by_symbol.get(cand.symbol)
-            pred = next((p for p in (self.quant_result.predictions if self.quant_result else [])
-                         if p.symbol == cand.symbol), None)
 
             # ── real LLM research (Arm C, Phase Q5) ──
             llm_snap, llm_sig, fusion = None, None, None
@@ -1007,25 +1115,40 @@ class AutonomousTradingLoop:
                 llm_mode=research.research_mode,
             ))
 
-            # ── Arm A: quant only ──
-            quant_long = bool(qsig and qsig.direction == SignalDirection.LONG)
-            quant_strength = float(getattr(qsig, "strength", 0.0) or 0.0)
-            arm_a_buy = quant_long and quant_strength >= 0.6
+            # ── Arm B / Arm C decisions ──
+            # Arm C falls back to Arm B's decision when the LLM is not wired in,
+            # and the delta below then correctly records "no change" instead of
+            # pretending the LLM abstained.
+            self._record_arm_decision(ArmDecision(
+                arm="deterministic_hybrid", symbol=cand.symbol,
+                action=arm_b_decision.action_hint, size_multiplier=1.0,
+                source="deterministic_ensemble",
+                detail={"combined_score": round(arm_b_decision.combined_score, 4),
+                        "research_direction": research_dir,
+                        "research_confidence": research.confidence}))
+            arm_c_action = fusion.final_signal if fusion is not None else arm_b_decision.action_hint
+            arm_c_mult = (fusion.final_strength if fusion is not None
+                          and fusion.final_strength > 0 else 1.0)
+            self._record_arm_decision(ArmDecision(
+                arm="llm_hybrid", symbol=cand.symbol,
+                action=arm_c_action, size_multiplier=arm_c_mult,
+                source="llm_fusion" if fusion is not None else "deterministic_ensemble(no LLM)",
+                detail={"effective_mode": fusion.effective_mode if fusion else "llm_unavailable",
+                        "conflict_state": fusion.conflict_state.value if fusion else "",
+                        "final_strength": fusion.final_strength if fusion else 0.0}))
 
-            # ── DecisionDelta: record what each arm would do ──
+            # ── DecisionDelta: DECISION attribution only ──
+            # This records that the LLM changed a decision. It deliberately
+            # makes no claim about money: that is answered by the three
+            # independent shadow books in portfolio attribution.
             delta = DecisionDelta(cycle=cycle, symbol=cand.symbol,
-                arm_decisions={
-                    "quant_only": {"action": "buy" if arm_a_buy else "no_action",
-                                   "strength": quant_strength},
-                    "deterministic_hybrid": {"action": arm_b_decision.action_hint,
-                                              "score": round(arm_b_decision.combined_score, 4)},
-                    "llm_hybrid": {"action": fusion.final_signal if fusion else "no_action",
-                                   "effective_mode": fusion.effective_mode if fusion else "quant_only_fallback",
-                                   "strength": fusion.final_strength if fusion else 0.0},
-                })
-            if fusion is not None and arm_b_decision.action_hint != fusion.final_signal:
+                arm_decisions={arm: d.to_dict()
+                               for arm, d in self._arm_decisions.get(cand.symbol, {}).items()})
+            if fusion is not None and arm_b_decision.action_hint != arm_c_action:
                 delta.llm_changed_decision = True
-                delta.change_summary = f"Arm B: {arm_b_decision.action_hint} → Arm C: {fusion.final_signal} (LLM)"
+                delta.change_type = classify_change(arm_b_decision.action_hint, arm_c_action)
+                delta.change_summary = (f"Arm B: {arm_b_decision.action_hint} → "
+                                        f"Arm C: {arm_c_action} (LLM)")
             self.shadow.record_delta(delta)
 
             # ── main account acts on the configured mode (default: Arm C when LLM active) ──
@@ -1213,6 +1336,69 @@ class AutonomousTradingLoop:
         self._finish_cycle(summary)
         return summary
 
+    # ── shadow arms ──
+
+    def _record_arm_decision(self, decision: ArmDecision) -> None:
+        self._arm_decisions.setdefault(decision.symbol, {})[decision.arm] = decision
+
+    def _shadow_prices(self) -> dict[str, float]:
+        """The ONE price map for this cycle's shadow step.
+
+        Starts from the quotes the decisions were actually made on, then fills
+        in any instrument an arm holds but that was not scanned this cycle —
+        otherwise an arm's holding would silently freeze at a stale mark and
+        that arm's return would be understated.
+        """
+        prices = dict(self._cycle_prices)
+        held: set[str] = set()
+        for book in self.shadow.books.values():
+            held |= {s for s, q in book.shares.items() if q > 0}
+        for symbol in held - set(prices):
+            secid = self._secid_by_symbol.get(symbol)
+            if not secid:
+                continue
+            quote = self.feed.get_quote(secid)
+            if not quote:
+                continue
+            price, _ = self._account_price(quote)
+            if price > 0:
+                prices[symbol] = price
+        return prices
+
+    def _shadow_step(self, cycle: int, signal_by_symbol: dict[str, Any]) -> dict[str, Any]:
+        """Advance all three counterfactual books one cycle.
+
+        Every arm gets its own decision list and its own target weights derived
+        from its OWN book. Nothing here reads the real broker's positions, and
+        nothing copies one arm's targets into another.
+        """
+        prices = self._shadow_prices()
+        if not prices and not self._arm_decisions:
+            # Nothing was priced and nothing was decided (e.g. an empty
+            # universe). Recording a zero-return cycle would only inflate the
+            # sample count toward "sufficient" without adding information.
+            return {"skipped": True, "reason": "no priced instrument this cycle"}
+        arm_targets: dict[str, dict[str, float]] = {}
+        for arm, book in self.shadow.books.items():
+            decisions = [per_arm[arm] for per_arm in self._arm_decisions.values()
+                         if arm in per_arm]
+            decided = {d.symbol for d in decisions}
+            # Shared carry/exit rule for names this arm holds but that were not
+            # researched this cycle. Identical for all three arms, so it cannot
+            # bias the comparison — it is machinery, not a decision policy.
+            for symbol in book.weights():
+                if symbol in decided:
+                    continue
+                sig = signal_by_symbol.get(symbol)
+                short = bool(sig and sig.direction == SignalDirection.SHORT)
+                decisions.append(ArmDecision(
+                    arm=arm, symbol=symbol,
+                    action="reduce" if short else "hold",
+                    source="shared_carry_rule",
+                    detail={"quant_direction": (sig.direction.value if sig else "unknown")}))
+            arm_targets[arm] = self.shadow.targets_for(arm, decisions)
+        return self.shadow.step(cycle, prices, arm_targets)
+
     # ── system truth ── the honest, un-fakeable component state
 
     def system_truth(self) -> dict[str, Any]:
@@ -1271,8 +1457,31 @@ class AutonomousTradingLoop:
         )
 
         broker_ok = not self.broker.kill_switch_active
+        selection = self.last_selection or {}
+        candidate_source = selection.get("source", "")
+        shadow_sample = self.shadow.sample_state()
+        day_state = self.risk.day_state.to_dict()
         return {
             "effective_mode": self.effective_mode,
+            # ── who actually chose the candidates this cycle ──
+            "candidate_selection": {
+                "source": candidate_source or "not_run",
+                "status": ("QUANT_LED" if candidate_source == "quant"
+                           else "HEURISTIC_FALLBACK" if candidate_source
+                           else "NOT_RUN"),
+                "reason": selection.get("reason", ""),
+                "selected": len(selection.get("selected", [])),
+                "rejected": selection.get("rejected_total", 0),
+                "policy": selection.get("policy", {}),
+            },
+            # ── can the shadow comparison support a claim yet? ──
+            "shadow": {
+                "status": ("SAMPLE_OK" if shadow_sample["sufficient"]
+                           else "INSUFFICIENT_SAMPLE"),
+                **shadow_sample,
+            },
+            # ── the trading-day risk counters the limits are gated on ──
+            "risk_state": day_state,
             "components": {
                 "market_data": comp("HEALTHY" if market_ok else "DEGRADED",
                                     self._t(f"{fresh_quotes} 只实时/延时报价",
@@ -1349,10 +1558,20 @@ class AutonomousTradingLoop:
                             "exit_verdict": exit_verdict})
 
         tradable, freshness = self._tradable(quote)
+        # The reference price for the bad-tick check is the previous close from
+        # the SAME quote, converted into the account currency the same way.
+        reference_price = 0.0
+        prev_close = quote.get("previous_close") or 0.0
+        if prev_close > 0:
+            reference_price, _ = self._account_price({**quote, "price": prev_close})
+        trading_date = str(quote.get("timestamp") or "")[:10] or self._cycle_trading_date
         result = self.risk.check(
             proposal, self.broker.account, self.broker.positions,
             list(self.broker.orders.values()), price,
             market_data_fresh=tradable,
+            trading_date=trading_date,
+            reference_price=reference_price,
+            kill_switch=self.broker.kill_switch_active,
         )
         risk_payload = result.to_payload()
         proposal.risk_result = proposal.risk_result | risk_payload
@@ -1547,32 +1766,29 @@ class AutonomousTradingLoop:
             self.broker.update_market_prices(prices)
         session.current_equity = self.broker.account.equity
         session.cash = self.broker.account.cash
+        # Roll/refresh the trading-day risk counters every cycle, not only when
+        # an order is proposed. Anchoring start-of-day equity on the first
+        # PROPOSAL of the day would measure the drawdown from whenever the
+        # system happened to want to trade, not from the open.
+        self.risk.day_state.observe(
+            trading_date=self._cycle_trading_date,
+            equity=self.broker.account.equity,
+            realized_pnl_total=sum(p.realized_pnl for p in self.broker.positions.values()),
+            unrealized_pnl_total=sum(p.unrealized_pnl for p in self.broker.positions.values()))
+        session.risk_day_state = self.risk.day_state.to_dict()
         market_value = sum(p.market_value for p in self.broker.positions.values())
         self.store.add_equity_point(session.session_id, session.cycle_count,
                                     session.current_equity, session.cash, market_value)
         self.store.save_broker_state(session.session_id, self.broker.to_state())
-        # ── Phase Q5: shadow portfolios (cycle-end mark) ──
-        day_returns: dict[str, float] = {}
-        for sym in set(self.shadow.books["quant_only"].weights) | set(
-                self.shadow.books["deterministic_hybrid"].weights) | set(
-                self.shadow.books["llm_hybrid"].weights):
-            pos = self.broker.positions.get(sym)
-            if pos and pos.market_value > 0 and pos.average_cost > 0 and pos.quantity > 0:
-                day_returns[sym] = (pos.market_price / pos.average_cost) - 1.0 if pos.average_cost else 0.0
-        arm_targets: dict[str, dict[str, float]] = {}
-        if self.quant_result is not None:
-            # Arm A: quant top-5 equally
-            top = sorted(
-                [c for c in self.quant_result.signals if c and c.direction == SignalDirection.LONG],
-                key=lambda s: s.strength, reverse=True)[:5]
-            if top:
-                arm_targets["quant_only"] = {s.symbol: 1.0 / len(top) for s in top}
-        arm_targets["deterministic_hybrid"] = {
-            pos.symbol: (pos.market_value / self.broker.account.equity
-                         if self.broker.account.equity > 0 else 0.0)
-            for pos in self.broker.positions.values() if pos.quantity > 0}
-        arm_targets["llm_hybrid"] = arm_targets["deterministic_hybrid"]
-        self.shadow.step(session.cycle_count, day_returns, arm_targets)
+        # ── shadow arms: three independent counterfactual books ──
+        # Each arm marks LAST cycle's holdings at THIS cycle's prices, then
+        # trades toward its OWN targets. No arm reads the broker or another arm.
+        signal_by_symbol = {s.symbol: s for s in (self.quant_result.signals
+                                                  if self.quant_result else [])}
+        try:
+            self._shadow_step(session.cycle_count, signal_by_symbol)
+        except Exception:
+            logger.exception("shadow step failed (non-fatal to the real book)")
         self.store.save_session(session)
         # Persist a truth snapshot so the /system-truth endpoint stays honest
         # even for a loop restored after a restart (which hasn't re-run quant).

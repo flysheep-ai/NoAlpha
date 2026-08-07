@@ -1,7 +1,7 @@
 {
  "market": "cn",
  "dataset": {
-  "dataset_id": "ds-fs-core:v1-e92ebb4785d60a80",
+  "dataset_id": "ds-fs-core:v1-b3aeb985e0548504",
   "universe": [
    "0.000001",
    "0.000333",
@@ -65,8 +65,96 @@
   "n_rows": 43435,
   "n_features": 23,
   "survivorship_bias_risk": true,
-  "content_hash": "e92ebb4785d60a80",
-  "created_at": "2026-07-07T04:59:58.456553+00:00"
+  "raw_data_hash": "e2700f02410f650e",
+  "data_snapshot": {
+   "snapshot_id": "snap-e2700f02410f650e",
+   "provider": "tencent-fqkline",
+   "adjustment_mode": "qfq",
+   "retrieved_at": "2026-08-07T04:25:48.019262+00:00",
+   "start_date": "2019-01-02",
+   "end_date": "2026-07-03",
+   "symbols": [
+    "0.000001",
+    "0.000333",
+    "0.000651",
+    "0.000725",
+    "0.000858",
+    "0.002415",
+    "0.002475",
+    "0.002594",
+    "0.002714",
+    "0.300059",
+    "0.300750",
+    "1.600030",
+    "1.600036",
+    "1.600276",
+    "1.600519",
+    "1.600809",
+    "1.600887",
+    "1.600900",
+    "1.601012",
+    "1.601318",
+    "1.601668",
+    "1.601899",
+    "1.601988",
+    "1.603288"
+   ],
+   "per_symbol_hash": {
+    "0.000001": "8e1e61c91b84d685",
+    "0.000333": "bb0892d43d1db58d",
+    "0.000651": "c7e86379c2cc7a4c",
+    "0.000725": "6a0749d3b5edaa8b",
+    "0.000858": "c75fa6ef42aabe91",
+    "0.002415": "6e2c8f86ca840238",
+    "0.002475": "183812dd57c51be9",
+    "0.002594": "eb8587ab923db8e7",
+    "0.002714": "5c2c4c4bff04fa5a",
+    "0.300059": "56f1f3225195a61a",
+    "0.300750": "0c941f6871813ca2",
+    "1.600030": "9d2238525283f7e5",
+    "1.600036": "f234e95e1caf8c81",
+    "1.600276": "58ea1044b7b03b0c",
+    "1.600519": "540f9968962123cf",
+    "1.600809": "5de39f74b621e138",
+    "1.600887": "d139545f51835c18",
+    "1.600900": "d85f0d8e9185243d",
+    "1.601012": "33acbe75597a5cce",
+    "1.601318": "fb05992b8d222205",
+    "1.601668": "ff12107777a2f573",
+    "1.601899": "d4fa7b1fec050755",
+    "1.601988": "344ae4139205466a",
+    "1.603288": "da00063d4a1d8b83"
+   },
+   "per_symbol_bars": {
+    "0.000001": 1962,
+    "0.000333": 1922,
+    "0.000651": 1956,
+    "0.000725": 1962,
+    "0.000858": 1962,
+    "0.002415": 1960,
+    "0.002475": 1962,
+    "0.002594": 1962,
+    "0.002714": 1962,
+    "0.300059": 1962,
+    "0.300750": 1956,
+    "1.600030": 1945,
+    "1.600036": 1962,
+    "1.600276": 1962,
+    "1.600519": 1962,
+    "1.600809": 1962,
+    "1.600887": 1962,
+    "1.600900": 1951,
+    "1.601012": 1956,
+    "1.601318": 1962,
+    "1.601668": 1962,
+    "1.601899": 1958,
+    "1.601988": 1962,
+    "1.603288": 1962
+   },
+   "combined_hash": "e2700f02410f650e"
+  },
+  "content_hash": "b3aeb985e0548504",
+  "created_at": "2026-08-07T04:25:48.019317+00:00"
  },
  "factor_ic": {
   "return_1d:v1": {
@@ -307,7 +395,7 @@
     "total_cost_drag": 0.5458840493045041
    }
   },
-  "research_only_deterministic": {
+  "deterministic_hybrid_baseline": {
    "signal": {
     "ic": 0.017512682863689864,
     "rank_ic": 0.0056855899329841635,
@@ -327,7 +415,7 @@
     "total_cost_drag": 0.5618754034288606
    }
   },
-  "hybrid_ensemble": {
+  "hybrid_ensemble_v1_deprecated": {
    "signal": {
     "ic": 0.034125449252694826,
     "rank_ic": 0.02454222464134055,
@@ -353,11 +441,11 @@
   "slippage_bps": 10.0,
   "sell_tax_bps": 5.0
  },
- "experiment_count": 8,
+ "experiment_count": 7,
  "multiple_testing_note": "7 models, no hyperparameter search, defaults only",
  "results": {
   "random": {
-   "experiment_id": "exp-77e5ed0cff3a",
+   "experiment_id": "exp-84daa48f5924",
    "status": "done",
    "metrics": {
     "signal": {
@@ -402,7 +490,7 @@
    }
   },
   "simple_momentum": {
-   "experiment_id": "exp-acc012a06541",
+   "experiment_id": "exp-bbe48f8b2cd4",
    "status": "done",
    "metrics": {
     "signal": {
@@ -447,7 +535,7 @@
    }
   },
   "simple_reversal": {
-   "experiment_id": "exp-66d42cfde845",
+   "experiment_id": "exp-41fc403ca242",
    "status": "done",
    "metrics": {
     "signal": {
@@ -492,7 +580,7 @@
    }
   },
   "existing_opportunity_score": {
-   "experiment_id": "exp-7b3d98440f41",
+   "experiment_id": "exp-69f12058bfeb",
    "status": "done",
    "metrics": {
     "signal": {
@@ -537,7 +625,7 @@
    }
   },
   "linear_ridge": {
-   "experiment_id": "exp-dd3b709b10e1",
+   "experiment_id": "exp-b2a5b00f2376",
    "status": "done",
    "metrics": {
     "signal": {
@@ -606,7 +694,7 @@
    }
   },
   "lightgbm": {
-   "experiment_id": "exp-44ec5ec15e2a",
+   "experiment_id": "exp-75c584a90ca5",
    "status": "done",
    "metrics": {
     "signal": {
@@ -675,7 +763,7 @@
    }
   },
   "xgboost": {
-   "experiment_id": "exp-763b6471a90a",
+   "experiment_id": "exp-8c92dcee340d",
    "status": "done",
    "metrics": {
     "signal": {

@@ -16,6 +16,7 @@ import pandas as pd
 from noalpha.quant.domain import DatasetVersion, content_hash
 from noalpha.quant.features import FEATURE_SET_VERSION, QuantFeatureEngine
 from noalpha.quant.labels import LabelEngine
+from noalpha.quant.provenance import DataSnapshot
 
 
 @dataclass
@@ -23,6 +24,7 @@ class QuantDataset:
     version: DatasetVersion
     frame: pd.DataFrame            # MultiIndex (date, secid); feature cols + "label"
     feature_columns: list[str]
+    snapshot: DataSnapshot | None = None   # the raw bars this was built from
 
     @property
     def dates(self) -> list[str]:
@@ -41,7 +43,9 @@ class QuantDatasetBuilder:
 
     def build(self, history: dict[str, list[dict[str, Any]]],
               start_date: str, end_date: str,
-              min_universe_per_day: int = 5) -> QuantDataset:
+              min_universe_per_day: int = 5,
+              *, provider: str = "tencent-fqkline", adjustment_mode: str = "qfq",
+              retrieved_at: str = "") -> QuantDataset:
         """history: secid -> ascending daily bars covering [start-lookback, end+horizon]."""
         feats: dict[str, pd.DataFrame] = {}
         fwd: dict[str, pd.Series] = {}
@@ -71,6 +75,14 @@ class QuantDatasetBuilder:
         good_dates = counts[counts >= min_universe_per_day].index
         frame = frame[frame.index.get_level_values("date").isin(good_dates)]
 
+        # The identity of a dataset is the DATA, not its shape. Hashing only
+        # {universe, features, label, range, n_rows} meant a provider that
+        # silently restated a price produced a byte-identical dataset_id, and
+        # two experiments that disagreed could both cite the same dataset.
+        snapshot = DataSnapshot.from_history(
+            history, provider=provider, adjustment_mode=adjustment_mode,
+            start_date=start_date, end_date=end_date, retrieved_at=retrieved_at)
+
         version = DatasetVersion(
             dataset_id="",
             universe=sorted(history.keys()),
@@ -80,15 +92,21 @@ class QuantDatasetBuilder:
             protocol=self.labels.protocol.to_dict(),
             n_rows=len(frame), n_features=len(self.engine.feature_ids),
             survivorship_bias_risk=True,  # today's watchlist, not PIT constituents (第二十八条)
+            raw_data_hash=snapshot.combined_hash,
+            data_snapshot=snapshot.to_dict(),
         )
         version.content_hash = content_hash({
             "universe": version.universe, "features": version.feature_ids,
             "label": version.label_id, "range": [start_date, end_date],
             "n_rows": version.n_rows,
+            "raw_data": snapshot.combined_hash,
+            "provider": snapshot.provider,
+            "adjustment_mode": snapshot.adjustment_mode,
         })
         version.dataset_id = f"ds-{FEATURE_SET_VERSION}-{version.content_hash}"
         return QuantDataset(version=version, frame=frame,
-                            feature_columns=list(self.engine.feature_ids))
+                            feature_columns=list(self.engine.feature_ids),
+                            snapshot=snapshot)
 
 
 @dataclass

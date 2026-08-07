@@ -21,6 +21,7 @@ from noalpha.quant.evaluation import (
 from noalpha.quant.features import FEATURE_SET_VERSION
 from noalpha.quant.labels import LabelEngine
 from noalpha.quant.models import QuantModel, create_model
+from noalpha.quant.provenance import ExperimentProvenance
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,20 @@ def run_walk_forward(dataset: QuantDataset, model_name: str, *,
         model=model_name, parameters=dict(params or {}), seed=seed,
         status="running",
     )
+    # Everything a rerun depends on, recorded before the run rather than
+    # reconstructed afterwards. `missing_fields` on the saved record is the
+    # honest answer to "can this be reproduced?".
+    provenance = ExperimentProvenance(
+        dataset_id=dataset.version.dataset_id,
+        data_snapshot_id=(dataset.snapshot.snapshot_id if dataset.snapshot else ""),
+        raw_data_hash=dataset.version.raw_data_hash,
+        feature_set_version=FEATURE_SET_VERSION,
+        label_version=dataset.version.label_id,
+        model_params=dict(params or {}),
+        random_seed=seed,
+        cost_model=cost.to_dict(),
+        universe_snapshot=list(dataset.version.universe),
+    )
     dates = dataset.dates
     folds = list(splitter.split(dates))
     if not folds:
@@ -118,6 +133,10 @@ def run_walk_forward(dataset: QuantDataset, model_name: str, *,
     ew = equal_weight_benchmark(exec_ret, horizon_days=horizon, cost=cost)
 
     exp.folds = fold_records
+    provenance.fold_definitions = fold_records
+    exp.provenance = provenance.to_dict()
+    exp.provenance_missing = provenance.missing_fields()
+    exp.reproducible = provenance.reproducible
     exp.train_period = list(folds[0].train)
     exp.test_period = [folds[0].test[0], folds[-1].test[1]]
     total_imp = sum(importances.values()) or 1.0

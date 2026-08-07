@@ -1,0 +1,128 @@
+{
+ "session_id": "78972f48-d94",
+ "sample": {
+  "cycles": 40,
+  "decision_changes": 0,
+  "required_cycles": 20,
+  "required_decision_changes": 10,
+  "sufficient": false,
+  "verdict": "INSUFFICIENT_SAMPLE"
+ },
+ "verdict": "LLM_UNAVAILABLE",
+ "decision_attribution": {
+  "decisions_total": 13,
+  "decision_change_count": 0,
+  "decision_change_rate": 0.0,
+  "by_change_type": {},
+  "llm_veto_count": 0,
+  "llm_reduce_count": 0,
+  "llm_confirmation_count": 13
+ },
+ "portfolio_attribution": {
+  "arms": {
+   "quant_only": {
+    "arm": "quant_only",
+    "cycles": 40,
+    "final_equity": 100000.0,
+    "cumulative_return": 0.0,
+    "mean_cycle_return": 0.0,
+    "cycle_return_vol": 0.0,
+    "sharpe_per_cycle": null,
+    "max_drawdown": 0.0,
+    "total_turnover": 0.0,
+    "total_cost": 0.0,
+    "cost_drag": 0.0,
+    "trades": 0
+   },
+   "deterministic_hybrid": {
+    "arm": "deterministic_hybrid",
+    "cycles": 40,
+    "final_equity": 101064.04421169507,
+    "cumulative_return": 0.01064044211695081,
+    "mean_cycle_return": 0.0002738599824093246,
+    "cycle_return_vol": 0.004349511944891965,
+    "sharpe_per_cycle": 0.06296338207116405,
+    "max_drawdown": -0.019071824531772807,
+    "total_turnover": 0.5732052617812109,
+    "total_cost": 85.64576762082541,
+    "cost_drag": 0.0008564576762082541,
+    "trades": 112
+   },
+   "llm_hybrid": {
+    "arm": "llm_hybrid",
+    "cycles": 40,
+    "final_equity": 101064.04421169507,
+    "cumulative_return": 0.01064044211695081,
+    "mean_cycle_return": 0.0002738599824093246,
+    "cycle_return_vol": 0.004349511944891965,
+    "sharpe_per_cycle": 0.06296338207116405,
+    "max_drawdown": -0.019071824531772807,
+    "total_turnover": 0.5732052617812109,
+    "total_cost": 85.64576762082541,
+    "cost_drag": 0.0008564576762082541,
+    "trades": 112
+   }
+  },
+  "llm_vs_quant": {
+   "return_delta": 0.01064044211695081,
+   "drawdown_delta": -0.019071824531772807,
+   "turnover_delta": 0.5732052617812109,
+   "cost_delta": 85.64576762082541
+  },
+  "llm_vs_deterministic": {
+   "return_delta": 0.0,
+   "drawdown_delta": 0.0,
+   "turnover_delta": 0.0,
+   "cost_delta": 0.0
+  }
+ },
+ "llm_cost": {
+  "llm_calls": 0,
+  "llm_tokens": 0,
+  "llm_failures": 0,
+  "llm_latency_ms_total": 0.0,
+  "tokens_per_decision_change": null,
+  "calls_per_decision_change": null,
+  "tokens_per_return_point": null
+ },
+ "llm_stats": {
+  "calls": 0,
+  "tokens": 0,
+  "latency_ms_total": 0.0,
+  "failures": 0,
+  "fallback_cycles": 0,
+  "vetoes": 0,
+  "confirmations": 0,
+  "reduces_triggered": 0
+ },
+ "fairness": {
+  "shared_price_map": true,
+  "shared_cost_bps": 15.0,
+  "shared_sizing_policy": {
+   "base_weight": 0.06,
+   "max_weight": 0.1,
+   "max_gross": 1.0
+  },
+  "mark_before_rebalance": true,
+  "limits": [
+   "no lot sizes, no partial fills, no intraday microstructure",
+   "cycles are scan cycles, not calendar periods — Sharpe is per-cycle"
+  ]
+ },
+ "replay": {
+  "instruments": [
+   "0.002463",
+   "0.300750",
+   "1.600519",
+   "105.AAPL",
+   "105.MSFT",
+   "105.NVDA"
+  ],
+  "first_date": "2026-06-11",
+  "last_date": "2026-08-06",
+  "cycles_run": 40,
+  "research_mode": "deterministic",
+  "llm_active": false
+ },
+ "verdict_detail": "Arm C fell back to Arm B's deterministic decisions for every cycle, so no incremental-LLM question was asked and none is answered here."
+}

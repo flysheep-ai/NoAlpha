@@ -61,7 +61,16 @@ class QuantInferenceService:
               market_scope: str = "ALL", bars_limit: int = 120) -> InferenceResult:
         """universe items: {"secid","symbol",...}; feed: get_daily_bars(secid, limit)."""
         now = datetime.now(timezone.utc).isoformat()
-        active = self.registry.active_model(market_scope)
+        try:
+            active = self.registry.active_model(market_scope)
+        except Exception as exc:
+            # An unloadable ACTIVE model (tampered artifact, hash mismatch,
+            # path escape) must DEGRADE the cycle, not kill the trading loop.
+            # Crashing here would take the whole session down; running anyway
+            # would let a decision keep quant-branded provenance it no longer
+            # deserves. Reporting UNAVAILABLE is the only honest outcome.
+            logger.exception("ACTIVE model could not be loaded")
+            return InferenceResult(as_of=now, error=f"ACTIVE model unusable: {exc}")
         if active is None:
             return InferenceResult(as_of=now, error="no ACTIVE model in registry")
         record, model = active

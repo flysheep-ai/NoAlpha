@@ -192,8 +192,11 @@ def test_promotion_gate_blocks_skipping(tmp_path):
                                   label_id="excess_return_5d:v1"), m)
     with pytest.raises(PromotionError):
         reg.promote(v.model_id, ModelStatus.ACTIVE)  # EXPERIMENTAL → ACTIVE forbidden
+    # This test asserts the STAGE-ORDER gate, not model quality: it has no
+    # evidence and says so through a recorded override rather than by
+    # fabricating a bundle that claims checks were run.
     for step in [ModelStatus.VALIDATED, ModelStatus.SHADOW, ModelStatus.PAPER, ModelStatus.ACTIVE]:
-        reg.promote(v.model_id, step)
+        reg.promote(v.model_id, step, override_reason="stage-order test fixture")
     active = reg.active_model()
     assert active is not None and active[0]["model_id"] == v.model_id
 

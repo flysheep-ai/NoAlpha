@@ -66,6 +66,10 @@ class TradingSession:
     last_cycle_at: str = ""
     next_cycle_at: str = ""
     error: str = ""
+    # Trading-day risk counters (TradingDayRiskState). Persisted so a restart
+    # cannot reset today's realized-loss limit — "restart to clear the risk
+    # limit" would otherwise be a working bypass of a hard control.
+    risk_day_state: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +89,7 @@ class TradingSession:
             "cycle_count": self.cycle_count, "risk_rejections": self.risk_rejections,
             "last_cycle_at": self.last_cycle_at, "next_cycle_at": self.next_cycle_at,
             "error": self.error,
+            "risk_day_state": self.risk_day_state,
         }
 
 
@@ -275,6 +280,7 @@ class TradingStore:
             risk_rejections=d.get("risk_rejections", 0),
             last_cycle_at=d.get("last_cycle_at", ""), next_cycle_at=d.get("next_cycle_at", ""),
             error=d.get("error", ""),
+            risk_day_state=d.get("risk_day_state") or {},
         )
         return session
 

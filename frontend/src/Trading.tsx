@@ -8,7 +8,7 @@ import { api } from "./api";
 import { QuantIntelligencePanel } from "./Quant";
 import type {
   DecisionEventInfo, DecisionStory, EquityPoint, PositionInfo,
-  ProposalRow, SystemTruth, ThesisInfo, TradingSessionInfo,
+  ProposalRow, ShadowAttribution, SystemTruth, ThesisInfo, TradingSessionInfo,
 } from "./api";
 
 function fmtMoney(v: number | undefined | null, ccy = ""): string {
@@ -88,6 +88,49 @@ function SystemTruthBar({ truth, zh }: { truth: SystemTruth | null; zh: boolean 
           </div>
         ))}
       </div>
+      {/* Who chose this cycle's candidates, and whether the three-arm
+          comparison can support a claim yet. Both are load-bearing for
+          trusting anything else on this page, so neither is hidden. */}
+      <div className="truth-grid" style={{ marginTop: 6 }}>
+        {truth.candidate_selection && (
+          <div className="truth-cell" title={truth.candidate_selection.reason}
+               style={{ borderColor: `${truthColor(truth.candidate_selection.status === "QUANT_LED" ? "HEALTHY" : "DEGRADED")}33` }}>
+            <span className="truth-dot" style={{ background: truthColor(truth.candidate_selection.status === "QUANT_LED" ? "HEALTHY" : "DEGRADED") }} />
+            <span style={{ fontWeight: 600 }}>{zh ? "候选来源" : "Candidate source"}</span>
+            <span className="truth-status" data-testid="candidate-source"
+                  style={{ color: truthColor(truth.candidate_selection.status === "QUANT_LED" ? "HEALTHY" : "DEGRADED") }}>
+              {truth.candidate_selection.status === "QUANT_LED"
+                ? (zh ? "量化排名主导" : "QUANT_LED")
+                : truth.candidate_selection.status === "HEURISTIC_FALLBACK"
+                  ? (zh ? "启发式回退" : "HEURISTIC_FALLBACK") : "NOT_RUN"}
+            </span>
+          </div>
+        )}
+        {truth.shadow && (
+          <div className="truth-cell"
+               title={zh ? `${truth.shadow.cycles}/${truth.shadow.required_cycles} 周期，${truth.shadow.decision_changes}/${truth.shadow.required_decision_changes} 次决策变更`
+                         : `${truth.shadow.cycles}/${truth.shadow.required_cycles} cycles, ${truth.shadow.decision_changes}/${truth.shadow.required_decision_changes} decision changes`}
+               style={{ borderColor: `${truthColor(truth.shadow.sufficient ? "HEALTHY" : "DEGRADED")}33` }}>
+            <span className="truth-dot" style={{ background: truthColor(truth.shadow.sufficient ? "HEALTHY" : "DEGRADED") }} />
+            <span style={{ fontWeight: 600 }}>{zh ? "三臂样本" : "Shadow sample"}</span>
+            <span className="truth-status" data-testid="shadow-sample"
+                  style={{ color: truthColor(truth.shadow.sufficient ? "HEALTHY" : "DEGRADED") }}>
+              {truth.shadow.status}
+            </span>
+          </div>
+        )}
+        {truth.risk_state?.trading_date && (
+          <div className="truth-cell"
+               title={zh ? `交易日 ${truth.risk_state.trading_date}；日内已实现 ${truth.risk_state.realized_pnl_today.toFixed(2)}`
+                         : `Trading day ${truth.risk_state.trading_date}; realized today ${truth.risk_state.realized_pnl_today.toFixed(2)}`}>
+            <span className="truth-dot" style={{ background: truthColor("HEALTHY") }} />
+            <span style={{ fontWeight: 600 }}>{zh ? "当日风控" : "Risk day"}</span>
+            <span className="truth-status" style={{ color: pctColor(truth.risk_state.realized_daily_loss_pct) }}>
+              {(truth.risk_state.realized_daily_loss_pct * 100).toFixed(2)}%
+            </span>
+          </div>
+        )}
+      </div>
       {degraded.length > 0 && (
         <div className="truth-degraded">
           {degraded.map(([label, comp]) => (
@@ -104,6 +147,138 @@ function SystemTruthBar({ truth, zh }: { truth: SystemTruth | null; zh: boolean 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Shadow attribution: the three-arm counterfactual comparison ──
+//
+// This panel is where a misleading "LLM alpha +X%" headline would live, so it
+// is built to refuse one. The verdict is rendered first and the per-arm
+// numbers are labelled as observations; the C−B delta is only ever presented
+// as a finding when the sample clears both thresholds.
+
+const ARM_LABELS: Record<string, [string, string]> = {
+  quant_only: ["A · 仅量化", "A · quant only"],
+  deterministic_hybrid: ["B · 量化+确定性研究", "B · quant + deterministic"],
+  llm_hybrid: ["C · 量化+LLM研究", "C · quant + LLM"],
+};
+
+function ShadowAttributionPanel({ sessionId, zh }: { sessionId: string; zh: boolean }) {
+  const [data, setData] = React.useState<ShadowAttribution | null>(null);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    let alive = true;
+    const load = () => api.tradingShadow(sessionId)
+      .then(d => { if (alive) { setData(d); setError(""); } })
+      .catch(e => { if (alive) setError(String(e)); });
+    load();
+    const timer = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [sessionId]);
+
+  if (error) return null;
+  if (!data) return null;
+
+  const sufficient = data.verdict === "SAMPLE_OK";
+  const verdictColor = sufficient ? "var(--good)" : "var(--warn)";
+  const arms = data.portfolio_attribution.arms;
+  const decision = data.decision_attribution;
+  const deltaB = data.portfolio_attribution.llm_vs_deterministic;
+  const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
+
+  return (
+    <div className="desk-panel" data-testid="shadow-panel" style={{ marginTop: 12 }}>
+      <div className="truth-strip-head">
+        <div className="truth-title">
+          <Eye size={16} style={{ color: verdictColor }} />
+          <strong>{zh ? "三臂影子归因 · LLM 是否带来增量 Alpha" : "Three-arm shadow attribution · does the LLM add incremental alpha"}</strong>
+        </div>
+        <span data-testid="shadow-verdict" className="mode-chip"
+              style={{ color: verdictColor, borderColor: verdictColor }}>
+          {data.verdict}
+        </span>
+      </div>
+
+      {/* The verdict, in words, before any number gets a chance to mislead. */}
+      <div style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 10px" }}>
+        {data.verdict === "LLM_UNAVAILABLE" ? (
+          zh ? <>C 臂本会话全程沿用 B 臂的确定性决策，<b>并未提出增量 LLM 问题</b>，因此此处也不回答它。</>
+             : <>Arm C ran Arm B's deterministic decisions all session, so <b>no incremental-LLM question was asked</b> and none is answered here.</>
+        ) : sufficient ? (
+          zh ? <>样本已满足门槛（{data.sample.cycles} 周期 / {data.sample.decision_changes} 次决策变更），下方 C−B 差值可作为发现读取。</>
+             : <>The sample clears both thresholds ({data.sample.cycles} cycles / {data.sample.decision_changes} decision changes); the C−B delta below may be read as a finding.</>
+        ) : (
+          zh ? <>样本不足（{data.sample.cycles}/{data.sample.required_cycles} 周期，{data.sample.decision_changes}/{data.sample.required_decision_changes} 次决策变更）。
+                 下方数字是三个真实账本的事实，<b>但还不构成关于 LLM 增量 Alpha 的结论</b>。</>
+             : <>Insufficient sample ({data.sample.cycles}/{data.sample.required_cycles} cycles, {data.sample.decision_changes}/{data.sample.required_decision_changes} decision changes).
+                 The numbers below are facts about three real books, <b>but they are not yet a conclusion about incremental LLM alpha</b>.</>
+        )}
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ color: "var(--faint)", textAlign: "right" }}>
+              <th style={{ textAlign: "left" }}>{zh ? "实验臂" : "Arm"}</th>
+              <th>{zh ? "累计收益" : "Cum. return"}</th>
+              <th>{zh ? "最大回撤" : "Max DD"}</th>
+              <th>{zh ? "换手" : "Turnover"}</th>
+              <th>{zh ? "成本" : "Cost"}</th>
+              <th>{zh ? "交易数" : "Trades"}</th>
+              <th>{zh ? "周期夏普" : "Sharpe/cycle"}</th>
+            </tr>
+          </thead>
+          <tbody style={{ fontFamily: "var(--font-mono)" }}>
+            {["quant_only", "deterministic_hybrid", "llm_hybrid"].map(arm => {
+              const m = arms[arm];
+              if (!m) return null;
+              const label = ARM_LABELS[arm][zh ? 0 : 1];
+              return (
+                <tr key={arm} style={{ textAlign: "right", borderTop: "1px solid var(--line)" }}>
+                  <td style={{ textAlign: "left", fontFamily: "var(--font-sans)" }}>{label}</td>
+                  <td style={{ color: pctColor(m.cumulative_return) }}>{pct(m.cumulative_return)}</td>
+                  <td style={{ color: "var(--bad)" }}>{pct(m.max_drawdown)}</td>
+                  <td>{m.total_turnover.toFixed(2)}</td>
+                  <td>{m.total_cost.toFixed(0)}</td>
+                  <td>{m.trades}</td>
+                  <td>{m.sharpe_per_cycle === null ? "—" : m.sharpe_per_cycle.toFixed(3)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 10, fontSize: 12 }}>
+        <div>
+          <div style={{ color: "var(--faint)" }}>{zh ? "决策归因（LLM 改变了什么）" : "Decision attribution (what the LLM changed)"}</div>
+          <div style={{ fontFamily: "var(--font-mono)" }}>
+            {decision.decision_change_count}/{decision.decisions_total}
+            {" "}({(decision.decision_change_rate * 100).toFixed(1)}%)
+            {" · "}veto {decision.llm_veto_count}
+            {" · "}reduce {decision.llm_reduce_count}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: "var(--faint)" }}>{zh ? "组合归因 C−B（改变之后的结果）" : "Portfolio attribution C−B (what the changes did)"}</div>
+          <div style={{ fontFamily: "var(--font-mono)",
+                        color: sufficient ? pctColor(deltaB.return_delta) : "var(--muted)" }}>
+            {sufficient ? pct(deltaB.return_delta) : `${pct(deltaB.return_delta)} (${zh ? "未达样本门槛" : "below sample threshold"})`}
+            {" · dd "}{pct(deltaB.drawdown_delta)}
+            {" · turn "}{deltaB.turnover_delta.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 8, fontSize: 11, color: "var(--faint)" }}>
+        {zh ? "公平性：三臂共用同一价格序列、同一成本模型、同一仓位规则与同一周期；先按上期持仓计价、再执行调仓，唯一差异是决策本身。"
+            : "Fairness: one price map, one cost model, one sizing policy and one cycle clock across all three arms; last cycle's holdings are marked before this cycle rebalances. The only difference is the decision."}
+        {" "}
+        {zh ? "影子账本不建模最小交易单位、部分成交与盘中微观结构。"
+            : "Shadow books ignore lot sizes, partial fills and intraday microstructure."}
+      </div>
     </div>
   );
 }
@@ -1313,6 +1488,9 @@ function SessionDashboard({ session: initial, onExit, zh }: { session: TradingSe
           </div>
         </div>
       </div>
+
+      {/* ── three-arm shadow attribution ── */}
+      <ShadowAttributionPanel sessionId={session.session_id} zh={zh} />
 
       {/* ── quant intelligence (Phase Q) ── */}
       <div className="quant-band">

@@ -8,10 +8,20 @@ import { request } from "./api";
 interface ActiveModel {
   model_id: string; name: string; version: number; market_scope: string;
   horizon_days: number; label_id: string; promoted_at: string;
+  promotion_evidence?: string;
+}
+interface PromotionAudit {
+  models_total: number;
+  by_evidence_state: Record<string, string[]>;
+  unverified: { model_id: string; name: string; status: string; market_scope: string; evidence: string }[];
+  active_unverified: string[];
+  unloadable_artifacts: { model_id: string; loadable: boolean; error: string }[];
+  active_but_unloadable: string[];
 }
 interface Overview {
   models_total: number; active_models: ActiveModel[]; experiments_total: number;
   feature_count: number; factor_count: number;
+  promotion_audit?: PromotionAudit;
 }
 interface ModelRecord {
   model_id: string; name: string; version: number; status: string;
@@ -89,12 +99,39 @@ export function QuantPage({ lang }: { lang: string }) {
       {/* active models */}
       <div className="panel wide" data-testid="quant-active-models">
         <div className="section-title">{zh ? "生效模型（驱动模拟交易）" : "Active models (feeding the simulated loop)"}</div>
+        {/* An ACTIVE row is a registry CLAIM. If the artifact does not load,
+            the loop is really running on the heuristic fallback and the panel
+            must say so instead of implying a working quant layer. */}
+        {overview.data?.promotion_audit?.active_but_unloadable?.length ? (
+          <div data-testid="quant-artifact-warning"
+               style={{ border: "1px solid var(--bad)", borderRadius: 6, padding: "8px 10px",
+                        marginBottom: 10, fontSize: 12, color: "var(--bad)" }}>
+            <b>{zh ? "ACTIVE 模型的 artifact 无法加载 — 交易循环实际未使用量化模型。"
+                   : "The ACTIVE model's artifact cannot be loaded — the trading loop is NOT using a quant model."}</b>
+            <div style={{ marginTop: 4, opacity: 0.9, fontFamily: "var(--font-mono)" }}>
+              {overview.data.promotion_audit.unloadable_artifacts
+                .map((a) => `${a.model_id}: ${a.error}`).join(" · ")}
+            </div>
+          </div>
+        ) : null}
+        {overview.data?.promotion_audit?.active_unverified?.length ? (
+          <div data-testid="quant-evidence-warning"
+               style={{ border: "1px solid var(--warn)", borderRadius: 6, padding: "8px 10px",
+                        marginBottom: 10, fontSize: 12, color: "var(--warn)" }}>
+            {zh ? "以下 ACTIVE 模型的晋级没有留下证据记录（在证据门禁上线前晋级），其状态真实但未经审计："
+                : "These ACTIVE models were promoted with no recorded evidence (promoted before the evidence gate existed). Their status is real but unaudited: "}
+            <span style={{ fontFamily: "var(--font-mono)" }}>
+              {overview.data.promotion_audit.active_unverified.join(", ")}
+            </span>
+          </div>
+        ) : null}
         {overview.data?.active_models?.length ? (
           <table className="data-table" style={{ width: "100%", fontSize: 13 }}>
             <thead><tr>
               <th>{zh ? "模型" : "Model"}</th><th>{zh ? "市场" : "Market"}</th>
               <th>{zh ? "预测目标" : "Label"}</th><th>{zh ? "周期" : "Horizon"}</th>
               <th>{zh ? "激活时间" : "Promoted"}</th>
+              <th>{zh ? "晋级证据" : "Promotion evidence"}</th>
             </tr></thead>
             <tbody>
               {overview.data.active_models.map((m) => (
@@ -102,6 +139,9 @@ export function QuantPage({ lang }: { lang: string }) {
                   <td><b>{m.name} v{m.version}</b> <span style={{ opacity: 0.6, fontSize: 11 }}>{m.model_id}</span></td>
                   <td>{m.market_scope}</td><td>{m.label_id}</td>
                   <td>{m.horizon_days}D</td><td>{m.promoted_at?.slice(0, 10)}</td>
+                  <td style={{ color: m.promotion_evidence === "EVIDENCED" ? "var(--good)" : "var(--warn)" }}>
+                    {m.promotion_evidence ?? "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
