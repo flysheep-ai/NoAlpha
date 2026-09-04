@@ -15,8 +15,22 @@ from noalpha.watch_models import ScanPolicy
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="noalpha", description="Autonomous stock investigation pipeline")
+    parser = argparse.ArgumentParser(
+        prog="noalpha",
+        description="Leakage-resistant evaluation and simulated trading for LLM research",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    demo = sub.add_parser("demo", help="Run reproducible measurement demonstrations")
+    demo_sub = demo.add_subparsers(dest="demo_command", required=True)
+    leakage = demo_sub.add_parser(
+        "leakage", help="Reproduce and reject a look-ahead-inflated backtest"
+    )
+    leakage.add_argument("--market", choices=["cn", "us"], default="cn")
+    leakage.add_argument("--top-k", type=int, default=5)
+    leakage.add_argument("--cache-dir", type=Path)
+    leakage.add_argument("--log-level", default="WARNING")
+
     investigate = sub.add_parser("investigate", help="Investigate a US equity symbol")
     investigate.add_argument("symbol", help="Ticker symbol, e.g. NVDA")
     investigate.add_argument("--as-of", help="Point-in-time boundary, ISO datetime")
@@ -87,6 +101,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     configure_logging(args.log_level)
+    if args.command == "demo":
+        from noalpha.demos.leakage import main as run_leakage_demo
+
+        demo_argv = ["--market", args.market, "--top-k", str(args.top_k)]
+        if args.cache_dir is not None:
+            demo_argv.extend(["--cache-dir", str(args.cache_dir)])
+        return run_leakage_demo(demo_argv)
     if args.command == "investigate":
         as_of_dt = parse_datetime(args.as_of) if args.as_of else None
         context = AsOfContext(as_of_dt) if as_of_dt else AsOfContext.now()

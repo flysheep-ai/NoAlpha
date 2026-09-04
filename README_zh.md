@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://github.com/flysheep-ai/NoAlpha">
-    <img src="docs/images/icon.png" height="220" alt="NoAlpha">
+    <img src="docs/images/icon.png" height="140" alt="NoAlpha">
   </a>
   <h1 align="center">
     <a href="https://github.com/flysheep-ai/NoAlpha">NoAlpha</a>
@@ -8,7 +8,7 @@
 </div>
 
 <p align="center">
-  <strong>为 LLM 交易研究提供可信的度量层。</strong>
+  <strong>面向 LLM 交易 Agent 的抗泄漏评估工具。</strong>
 </p>
 
 <p align="center">
@@ -29,13 +29,11 @@
   <a href="docs/">
     <img alt="Docs: ADR + audit reports" src="https://img.shields.io/badge/DOCS-ADR%20+%20AUDIT-blueviolet.svg?style=for-the-badge&logo=readthedocs&logoColor=white&labelColor=000000&logoWidth=20">
   </a>
-  <a href="https://github.com/flysheep-ai/NoAlpha/stargazers">
-    <img alt="GitHub stars" src="https://img.shields.io/github/stars/flysheep-ai/NoAlpha?style=for-the-badge&logo=github&logoColor=white&labelColor=000000&color=f5c518">
-  </a>
 </p>
 
 <p align="center">
-  <a href="#快速开始">快速开始</a> ·
+  <a href="#亲手复现一次失败">运行核心证明</a> ·
+  <a href="#运行完整控制台">运行完整控制台</a> ·
   <a href="#这个项目新在哪">项目新在哪</a> ·
   <a href="#这套度量层测出了什么">实测结果</a> ·
   <a href="#在相信任何东西之前请先读这些限制">已知限制</a> ·
@@ -48,17 +46,42 @@
 
 **为什么叫 "NoAlpha"？** 因为宣称 alpha 很容易，证明 alpha 很难。这个项目拒绝宣称它无法证明的东西——**包括关于它自己的**。
 
+## 亲手复现一次失败
+
+理解 NoAlpha 最快的方式，是看它制造出一个很漂亮的回测，再亲手把它否决掉。首次运行会下载并缓存真实行情，后续运行可离线完成且更快。
+
+```bash
+git clone https://github.com/flysheep-ai/NoAlpha.git
+cd NoAlpha
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[quant]"
+noalpha demo leakage
+```
+
+预期结果：
+
+```text
+                           Rank IC   Rank ICIR    net return    sharpe
+  clean protocol           +0.0274      +0.115       +11.45%     +0.21
+  leaky same-bar           +0.3644      +1.488       -33.07%     -0.22
+
+  Rank IC inflation: 13.3x
+OK: leakage reproduced and rejected (13.3x inflation).
+```
+
+特征、折叠、成本和可执行收益完全相同，唯一变化是 label。如果泄漏不再复现，命令会以非零状态退出。
+
 ## ✨ 核心特性
 
 - 🔒 **Point-in-time 是结构性的** —— label 自带执行假设（`open[T+1+h]/open[T+1]-1`）。同 bar 执行在结构上不可能，而不只是"不推荐"。
-- 🕰️ **Forward-only 的 LLM 特征采集** —— append-only 存储，`available_at` 取一次真实 LLM 调用的墙钟完成时间，并且**拒绝补写历史**。据我们所知，这是针对**参数性前视**唯一的开源防御实现。
+- 🕰️ **Forward-only 的 LLM 特征采集** —— append-only 存储，`available_at` 取一次真实 LLM 调用的墙钟完成时间，并且**拒绝补写历史**，为**参数性前视**提供一种可落地的防御。
 - 🧪 **一个能伪造出自身欺诈的回测系统** —— 一条命令复现**13.3 倍的 Rank IC 虚高**，差别只在换掉一个 label；一旦泄漏不再复现，脚本以非零码退出。
 - 📊 **三臂归因** —— `quant_only` / `deterministic_hybrid` / `llm_hybrid` 跑在同一行情、同一成本假设、同一周期时序上，于是"LLM 到底有没有用"是一个可归因的数字，而不是一种感觉。
 - 🚦 **晋级是门禁，不是习惯** —— `EXPERIMENTAL → VALIDATED → SHADOW → PAPER → ACTIVE` 逐级推进、代码强制。美股模型没跑赢基准，就停在 `SHADOW` 且不参与交易。
 - 🧭 **LLM 永远不下单** —— 它输出结构化信号进入版本化的确定性融合策略，该策略可以降权或否决，但不能发起交易。代码库中任何地方都不存在 `"you are a trader"` 提示词。
 - 🌏 **A 股 + 美股** —— 多主机 provider 回退链、交易所时间戳驱动的 freshness、交易日历；延迟秒数是接口的一等字段。
 - 🖥️ **会承认自己没用上什么的控制台** —— FastAPI + React；每一笔持仓都能追回产生它的决策故事，未启用的层在界面上标 `UNAVAILABLE`，而不是静默伪装。
-- ♻️ **端到端可复现** —— `pytest tests/ -q` → 141 passed，其中含 7 项主动尝试把未来信息偷渡过 PIT 守卫的 leakage attack 测试。
+- ♻️ **端到端可复现** —— 240+ 项测试，其中包含主动尝试把未来信息偷渡过 PIT 守卫的 leakage attack。
 
 ---
 
@@ -83,7 +106,7 @@
 
 ## 这个项目新在哪
 
-以下四件事，我们在现有开源交易项目里没有找到对应实现：
+下面四项设计使它区别于大多数开源交易项目：
 
 ### 1. Forward-only LLM 特征采集
 
@@ -95,7 +118,7 @@
 
 学术界的方案是**重训模型**，这对绝大多数实践者不可及。`noalpha/quant/llm_features.py` 走工程路线：一个 append-only 存储，`available_at` 是一次真实 LLM 调用的墙钟完成时间，并且**拒绝补写历史**。补写的记录被强制标为 `pit_safe=false`，排除在就绪计数之外。
 
-它很慢——就绪时间以月计而非分钟计——而且据我们所知，**这是该纪律唯一的开源实现**。
+它很慢——就绪时间以月计而非分钟计——因为实现选择了可审计的前向采集，而不是无法验证的历史补写。
 
 ### 2. 一个能伪造出自身欺诈的回测系统
 
@@ -194,9 +217,12 @@ Label 编码执行假设：`open[T+1+h]/open[T+1]-1`——`T` 收盘决策，`T+
 
 ---
 
-## 快速开始
+## 运行完整控制台
 
 ```bash
+git clone https://github.com/flysheep-ai/NoAlpha.git
+cd NoAlpha
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[quant]"          # 核心安装不含 ML 依赖
 cp .env.example .env               # 可选：填入 LLM key 以启用研究层
 uvicorn noalpha.api:app --port 8000
@@ -217,7 +243,7 @@ cd frontend && npm install && npm run dev   # 控制台 http://127.0.0.1:5173
 ### 复现
 
 ```bash
-python experiments/leakage_demo.py                    # 13.3 倍虚假优势演示
+noalpha demo leakage                                  # 13.3 倍虚假优势演示
 python experiments/quant_phase_q.py --market cn       # 完整 7 模型 walk-forward
 python -m evals.runners.autonomous_replay             # 历史回放，闭环决策
 ```
@@ -233,7 +259,7 @@ noalpha trading status
 ### 测试
 
 ```bash
-pytest tests/ -q     # 141 passed, 4 skipped
+pytest tests/ -q
 ```
 
 其中含 7 项 leakage attack 测试（主动尝试把未来信息偷渡过 PIT 守卫），以及硬不变量测试（已成交的 proposal 永远不可能报告为 pending）。
@@ -253,13 +279,8 @@ pytest tests/ -q     # 141 passed, 4 skipped
 - **攻击 point-in-time 守卫。** 如果你能把未来信息偷渡过去，那正是我们想要的 bug 报告，欢迎补进 leakage attack 测试集。
 - **时点指数成分股数据**，用来摘掉 `survivorship_bias_risk` 这个标记。
 
-较大的 PR 请先开一个 [issue](https://github.com/flysheep-ai/NoAlpha/issues)。提交前请先跑 `pytest tests/ -q`；**任何以削弱守卫为代价换取指标提升的改动都不会被合并。**
-
-## Star 趋势
-
-<a href="https://star-history.com/#flysheep-ai/NoAlpha&Date">
-  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=flysheep-ai/NoAlpha&type=Date" width="600">
-</a>
+开发环境、测试命令和度量完整性规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。较大的 PR 请先开一个
+[issue](https://github.com/flysheep-ai/NoAlpha/issues)。
 
 ## 免责声明
 

@@ -1,0 +1,46 @@
+name: Bug report
+description: Report an incorrect result, broken workflow, or integrity failure
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping make NoAlpha stricter. Never include credentials or private market/broker data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and why it appears incorrect.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the command, inputs, and smallest reproducible example.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: NoAlpha version or commit
+      placeholder: v0.x.y or git SHA
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and logs
+      description: Add sanitized output, screenshots, or result artifacts.
+  - type: checkboxes
+    id: integrity
+    attributes:
+      label: Integrity area
+      options:
+        - label: Point-in-time or look-ahead behavior
+        - label: Execution or cost accounting
+        - label: LLM attribution or fallback disclosure
+        - label: Broker or risk-policy gate
+        - label: User interface or documentation

@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://github.com/flysheep-ai/NoAlpha">
-    <img src="docs/images/icon.png" height="220" alt="NoAlpha">
+    <img src="docs/images/icon.png" height="140" alt="NoAlpha">
   </a>
   <h1 align="center">
     <a href="https://github.com/flysheep-ai/NoAlpha">NoAlpha</a>
@@ -8,7 +8,7 @@
 </div>
 
 <p align="center">
-  <strong>Trustworthy measurement for LLM trading research.</strong>
+  <strong>Leakage-resistant evaluation for LLM trading agents.</strong>
 </p>
 
 <p align="center">
@@ -29,13 +29,11 @@
   <a href="docs/">
     <img alt="Docs: ADR + audit reports" src="https://img.shields.io/badge/DOCS-ADR%20+%20AUDIT-blueviolet.svg?style=for-the-badge&logo=readthedocs&logoColor=white&labelColor=000000&logoWidth=20">
   </a>
-  <a href="https://github.com/flysheep-ai/NoAlpha/stargazers">
-    <img alt="GitHub stars" src="https://img.shields.io/github/stars/flysheep-ai/NoAlpha?style=for-the-badge&logo=github&logoColor=white&labelColor=000000&color=f5c518">
-  </a>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> ·
+  <a href="#reproduce-the-failure">Run the proof</a> ·
+  <a href="#run-the-full-console">Run the console</a> ·
   <a href="#whats-new-here">What's new here</a> ·
   <a href="#what-the-instruments-measured">Results</a> ·
   <a href="#limitations-you-should-read-before-trusting-anything-here">Limitations</a> ·
@@ -53,17 +51,45 @@ research and simulated-trading system.
 **Why "NoAlpha"?** Because claiming alpha is easy and proving it is hard. This
 project refuses to claim what it cannot prove — including about itself.
 
+## Reproduce the failure
+
+The fastest way to understand NoAlpha is to watch it manufacture a convincing
+backtest and then reject it. The first run downloads and caches real market data;
+subsequent runs are offline and faster.
+
+```bash
+git clone https://github.com/flysheep-ai/NoAlpha.git
+cd NoAlpha
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[quant]"
+noalpha demo leakage
+```
+
+Expected result:
+
+```text
+                           Rank IC   Rank ICIR    net return    sharpe
+  clean protocol           +0.0274      +0.115       +11.45%     +0.21
+  leaky same-bar           +0.3644      +1.488       -33.07%     -0.22
+
+  Rank IC inflation: 13.3x
+OK: leakage reproduced and rejected (13.3x inflation).
+```
+
+Same features, folds, costs, and executable returns. Only the label changes.
+The command exits non-zero if the leak ever stops reproducing.
+
 ## ✨ Features
 
 - 🔒 **Point-in-time by construction** — labels encode their execution assumption (`open[T+1+h]/open[T+1]-1`). Same-bar execution is structurally impossible, not merely discouraged.
-- 🕰️ **Forward-only LLM feature collection** — an append-only store whose `available_at` is the wall-clock end of a real LLM call, and which *refuses to backfill*. As far as we can tell, the only open-source defense against **parametric** look-ahead.
+- 🕰️ **Forward-only LLM feature collection** — an append-only store whose `available_at` is the wall-clock end of a real LLM call, and which *refuses to backfill*: a practical defense against **parametric** look-ahead.
 - 🧪 **A backtest that manufactures its own fraud** — one command reproduces a **13.3× Rank IC inflation** from a single swapped label, and exits non-zero if the leak ever stops reproducing.
 - 📊 **Three-arm attribution** — `quant_only` / `deterministic_hybrid` / `llm_hybrid` run on identical quotes, costs and cycle timing, so "did the LLM help?" is an attributable number rather than a vibe.
 - 🚦 **Promotion is a gate, not a habit** — `EXPERIMENTAL → VALIDATED → SHADOW → PAPER → ACTIVE`, enforced in code. The US model failed to beat its benchmark, so it sits at `SHADOW` and does not trade.
 - 🧭 **The LLM never places an order** — it emits a structured signal into a versioned deterministic fusion policy that can damp or veto, but not originate, a trade. No `"you are a trader"` prompt exists anywhere in the codebase.
 - 🌏 **A-shares and US equities** — multi-host provider fallback, exchange-timestamp freshness, trading calendars; delay-in-seconds is a first-class API field.
 - 🖥️ **A console that admits what it didn't use** — FastAPI + React; every position traces back to the decision story that produced it, and unavailable layers are labelled `UNAVAILABLE` on screen instead of silently faked.
-- ♻️ **Reproducible end to end** — `pytest tests/ -q` → 141 passed, including 7 leakage-attack tests that actively try to sneak future information past the point-in-time guard.
+- ♻️ **Reproducible end to end** — 240+ tests, including leakage attacks that actively try to sneak future information past the point-in-time guard.
 
 ---
 
@@ -95,7 +121,7 @@ project refuses to claim what it cannot prove — including about itself.
 
 ## What's new here
 
-Four things this repository does that we could not find in existing open-source
+Four design choices that distinguish this repository from most open-source
 trading projects:
 
 ### 1. Forward-only LLM feature collection
@@ -115,8 +141,8 @@ instead: an append-only store whose `available_at` is the wall-clock completion
 time of a real LLM call, which **refuses to backfill**. Retro-generated rows are
 forced to `pit_safe=false` and excluded from readiness counts.
 
-It is slow — readiness is months, not minutes — and as far as we can tell it is
-the only open-source implementation of the discipline.
+It is slow — readiness is months, not minutes — because the implementation
+chooses auditable forward collection over unverifiable historical backfills.
 
 ### 2. A backtest that can manufacture its own fraud
 
@@ -256,9 +282,12 @@ averaging them away.
 
 ---
 
-## Quick start
+## Run the full console
 
 ```bash
+git clone https://github.com/flysheep-ai/NoAlpha.git
+cd NoAlpha
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[quant]"          # core install omits the ML extras
 cp .env.example .env               # optional: add an LLM key to enable research
 uvicorn noalpha.api:app --port 8000
@@ -282,7 +311,7 @@ and is enforced by a test.
 ### Reproduce
 
 ```bash
-python experiments/leakage_demo.py                    # the 13.3x inflation demo
+noalpha demo leakage                                  # the 13.3x inflation demo
 python experiments/quant_phase_q.py --market cn       # full 7-model walk-forward
 python -m evals.runners.autonomous_replay             # historical replay, closed loops
 ```
@@ -298,7 +327,7 @@ noalpha trading status
 ### Tests
 
 ```bash
-pytest tests/ -q     # 141 passed, 4 skipped
+pytest tests/ -q
 ```
 
 Includes 7 leakage-attack tests that try to sneak future information past the
@@ -328,15 +357,9 @@ not the ones that make the numbers prettier:
 - **Point-in-time index constituents**, to retire the `survivorship_bias_risk`
   flag.
 
-Please open an [issue](https://github.com/flysheep-ai/NoAlpha/issues) before a
-large PR. Run `pytest tests/ -q` first; a change that improves a metric while
-weakening a guard will not be merged.
-
-## Star History
-
-<a href="https://star-history.com/#flysheep-ai/NoAlpha&Date">
-  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=flysheep-ai/NoAlpha&type=Date" width="600">
-</a>
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test commands, and the
+measurement-integrity rules applied to pull requests. Please open an
+[issue](https://github.com/flysheep-ai/NoAlpha/issues) before a large PR.
 
 ## Disclaimer
 

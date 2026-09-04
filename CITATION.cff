@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use NoAlpha in research, please cite the software."
+title: "NoAlpha: Leakage-resistant evaluation for LLM trading research"
+type: software
+authors:
+  - family-names: "flysheep-ai"
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/flysheep-ai/NoAlpha"
+url: "https://github.com/flysheep-ai/NoAlpha"
+abstract: >-
+  An honesty harness for LLM trading research with point-in-time discipline,
+  leakage self-tests, forward-only LLM feature collection, and attributable
+  simulated-trading comparisons.
+keywords:
+  - quantitative finance
+  - large language models
+  - look-ahead bias
+  - point-in-time data
+  - backtesting

@@ -1,4 +1,4 @@
-"""Stock research agent vertical slice."""
+"""Leakage-resistant measurement infrastructure for LLM trading research."""
 
 __all__ = ["__version__"]
 

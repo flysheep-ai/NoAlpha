@@ -48,7 +48,9 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/flysheep-ai/NoAlpha"
+Documentation = "https://github.com/flysheep-ai/NoAlpha/tree/main/docs"
 Issues = "https://github.com/flysheep-ai/NoAlpha/issues"
+Changelog = "https://github.com/flysheep-ai/NoAlpha/blob/main/CHANGELOG.md"
 
 [project.scripts]
 noalpha = "noalpha.cli:main"
