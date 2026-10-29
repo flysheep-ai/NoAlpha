@@ -40,7 +40,7 @@ from noalpha.quant.llm_features import LLMFeatureStore
 from noalpha.quant.portfolio import InverseVolatilityOptimizer
 from noalpha.quant.registry import QuantModelRegistry
 from noalpha.trading.research_fusion import (
-    FusionPolicy, TradingResearchService, default_trading_research_service,
+    MIN_QUANT_ENTRY_STRENGTH, FusionPolicy, TradingResearchService, default_trading_research_service,
     snapshot_to_signal,
 )
 from noalpha.trading.candidate_policy import CandidateSelectionPolicy
@@ -1028,7 +1028,7 @@ class AutonomousTradingLoop:
             # no longer be a counterfactual.
             quant_long = bool(qsig and qsig.direction == SignalDirection.LONG)
             quant_strength = float(getattr(qsig, "strength", 0.0) or 0.0)
-            arm_a_buy = quant_long and quant_strength >= 0.6
+            arm_a_buy = quant_long and MIN_QUANT_ENTRY_STRENGTH <= quant_strength <= 1.0
             self._record_arm_decision(ArmDecision(
                 arm="quant_only", symbol=cand.symbol,
                 action="buy" if arm_a_buy else "no_action",
@@ -1081,29 +1081,30 @@ class AutonomousTradingLoop:
                     secid=cand.secid, symbol=cand.symbol,
                     market=cand.quote.get("market", ""),
                     day_change_pct=day_change)
-                self.shadow.llm_stats["calls"] += 1
+                # These counters measure new research attempts. Cache hits and
+                # denied attempts made no LLM call and incurred no new cost.
+                if snap_status == "generated" or snap_status.startswith("failed:"):
+                    self.shadow.llm_stats["calls"] += 1
                 if llm_snap is not None:
                     llm_sig = snapshot_to_signal(llm_snap)
-                    self.shadow.llm_stats["tokens"] += llm_snap.input_tokens + llm_snap.output_tokens
-                    self.shadow.llm_stats["latency_ms_total"] += llm_snap.latency_ms
-                else:
+                    if snap_status == "generated":
+                        self.shadow.llm_stats["tokens"] += llm_snap.input_tokens + llm_snap.output_tokens
+                        self.shadow.llm_stats["latency_ms_total"] += llm_snap.latency_ms
+                elif snap_status.startswith("failed:"):
                     self.shadow.llm_stats["failures"] += 1
                 # always call fusion (handles llm=None internally as fallback)
                 fusion = self.fusion_policy.fuse(
                     symbol=cand.symbol, secid=cand.secid, quant=qsig, llm=llm_sig)
                 if fusion.effective_mode != "hybrid_llm_quant":
                     self.shadow.llm_stats["fallback_cycles"] += 1
-                if fusion.conflict_state.value != "none":
-                    self.shadow.llm_stats["vetoes"] += 1
-                else:
-                    self.shadow.llm_stats["confirmations"] += 1
                 fusion_detail = (f"(quant {fusion.quant_contribution.get('direction','?')}"
                                  f" × LLM {llm_sig.direction.value if llm_sig else 'unavailable'}"
                                  f" → {fusion.conflict_state.value})")
                 self._emit("fusion", self._t(
-                    f"{cand.symbol} 真LLM融合：{fusion.final_signal} {fusion_detail}",
-                    f"{cand.symbol} real-LLM fusion: {fusion.final_signal} {fusion_detail}"),
-                           secid=cand.secid, symbol=cand.symbol, payload=fusion.to_dict())
+                    f"{cand.symbol} 研究融合：{fusion.final_signal} {fusion_detail}",
+                    f"{cand.symbol} research fusion: {fusion.final_signal} {fusion_detail}"),
+                           secid=cand.secid, symbol=cand.symbol,
+                           payload={**fusion.to_dict(), "research_status": snap_status})
 
             # ── Arm B: deterministic ensemble (preserved baseline) ──
             research_dir = ("bullish" if len(research.bull_case) > len(research.bear_case)
@@ -1127,12 +1128,14 @@ class AutonomousTradingLoop:
                         "research_direction": research_dir,
                         "research_confidence": research.confidence}))
             arm_c_action = fusion.final_signal if fusion is not None else arm_b_decision.action_hint
+            llm_admitted = fusion is not None and fusion.effective_mode == "hybrid_llm_quant"
             arm_c_mult = (fusion.final_strength if fusion is not None
                           and fusion.final_strength > 0 else 1.0)
             self._record_arm_decision(ArmDecision(
                 arm="llm_hybrid", symbol=cand.symbol,
                 action=arm_c_action, size_multiplier=arm_c_mult,
-                source="llm_fusion" if fusion is not None else "deterministic_ensemble(no LLM)",
+                source=("llm_fusion" if llm_admitted else fusion.effective_mode
+                        if fusion is not None else "deterministic_ensemble(no LLM)"),
                 detail={"effective_mode": fusion.effective_mode if fusion else "llm_unavailable",
                         "conflict_state": fusion.conflict_state.value if fusion else "",
                         "final_strength": fusion.final_strength if fusion else 0.0}))
@@ -1144,17 +1147,23 @@ class AutonomousTradingLoop:
             delta = DecisionDelta(cycle=cycle, symbol=cand.symbol,
                 arm_decisions={arm: d.to_dict()
                                for arm, d in self._arm_decisions.get(cand.symbol, {}).items()})
-            if fusion is not None and arm_b_decision.action_hint != arm_c_action:
+            if llm_admitted and arm_b_decision.action_hint != arm_c_action:
                 delta.llm_changed_decision = True
                 delta.change_type = classify_change(arm_b_decision.action_hint, arm_c_action)
                 delta.change_summary = (f"Arm B: {arm_b_decision.action_hint} → "
                                         f"Arm C: {arm_c_action} (LLM)")
+            if llm_admitted:
+                if arm_b_decision.action_hint == "buy" and arm_c_action in ("no_action", "watch"):
+                    self.shadow.llm_stats["vetoes"] += 1
+                elif arm_b_decision.action_hint == arm_c_action:
+                    self.shadow.llm_stats["confirmations"] += 1
             self.shadow.record_delta(delta)
 
             # ── main account acts on the configured mode (default: Arm C when LLM active) ──
-            # self.effective_mode is the TRUE provenance (computed from real
-            # quant/llm state); fusion.effective_mode only exists on the LLM path.
-            effective_mode = self.effective_mode
+            # Service availability is not proof that this candidate received
+            # usable research. Persist its actual fallback on the proposal.
+            effective_mode = (DecisionMode.QUANT_ONLY_FALLBACK.value
+                              if fusion is not None and not llm_admitted else self.effective_mode)
             if fusion is not None and fusion.final_signal == "buy":
                 proposal = self.engine.build_buy_proposal(cand, research)
                 if pred is not None and qsig is not None:
@@ -1182,7 +1191,7 @@ class AutonomousTradingLoop:
                         "pit_safe": llm_snap.pit_safe,
                         "fusion": fusion.to_dict() if fusion else None,
                     }
-                proposal.decision_quality = "hybrid_llm_quant"
+                proposal.decision_quality = "hybrid_llm_quant" if llm_admitted else effective_mode
                 proposal.decision_mode = effective_mode
                 # fusion multiplier into weight chain
                 current_weights = {
@@ -1239,7 +1248,7 @@ class AutonomousTradingLoop:
                     self._execute_proposal(proposal, cand.quote, summary,
                                            exit_verdict="llm_triggered", research=research)
                     continue
-            elif (arm_a_buy or not quant_long) and arm_b_decision.action_hint == "buy":
+            elif fusion is None and (arm_a_buy or not quant_long) and arm_b_decision.action_hint == "buy":
                 # arm_a_buy OR quant unavailable: both buy signals OR quant absent
                 # but deterministic ensemble says buy → proceed
                 proposal = self.engine.build_buy_proposal(cand, research)

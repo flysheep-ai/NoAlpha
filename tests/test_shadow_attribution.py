@@ -246,7 +246,8 @@ def test_decision_attribution_classifies_change_types(tmp_path):
     for change in ["buy->no_action", "buy->no_action", "buy->reduce", "hold->sell"]:
         arena.record_delta(DecisionDelta(symbol="X", llm_changed_decision=True,
                                          change_type=change))
-    arena.record_delta(DecisionDelta(symbol="X", llm_changed_decision=False))
+    arena.record_delta(DecisionDelta(symbol="X", llm_changed_decision=False,
+                                    arm_decisions={"llm_hybrid": {"source": "llm_fusion"}}))
     d = arena.decision_attribution()
     assert d["decision_change_count"] == 4
     assert d["decisions_total"] == 5

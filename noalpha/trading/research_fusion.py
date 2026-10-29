@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -27,7 +28,8 @@ from ..i18n import DEFAULT_LANG, t
 
 logger = logging.getLogger(__name__)
 
-FUSION_POLICY_VERSION = "fusion-policy:v1"
+FUSION_POLICY_VERSION = "fusion-policy:v2"
+MIN_QUANT_ENTRY_STRENGTH = 0.6
 SNAPSHOT_SCHEMA_VERSION = "trading-research-snapshot:v1"
 
 
@@ -51,6 +53,7 @@ class ConflictState(str, Enum):
     HIGH_INTERNAL_LLM_CONFLICT = "high_internal_llm_conflict"
     LOW_EVIDENCE = "low_evidence"
     MISSING_LLM = "missing_llm"
+    UNSAFE_LLM = "unsafe_llm"
 
 
 @dataclass
@@ -239,7 +242,7 @@ def snapshot_to_signal(snap: TradingResearchSnapshot) -> LLMResearchSignal:
         horizon=snap.expected_horizon,
         snapshot_id=snap.snapshot_id,
         low_evidence=low_evidence,
-        pit_safe=snap.pit_safe,
+        pit_safe=snap.pit_safe and not snap.research_only,
     )
 
 
@@ -274,9 +277,11 @@ BEARISH_DIRS = {ResearchDirection.BEARISH, ResearchDirection.STRONGLY_BEARISH}
 
 
 class FusionPolicy:
-    """v1 deterministic fusion (第十三/十四条): quant discovers candidates and
+    """v2 deterministic fusion: evidence admission precedes interpretation.
+
+    Quant discovers candidates and
     sets expected return; the LLM confirms, contextualizes or vetoes. The LLM
-    alone can never force a large position."""
+    cannot bypass the quant entry threshold, even with strong confirmation."""
 
     def __init__(self, lang: str = DEFAULT_LANG) -> None:
         self.lang = lang
@@ -291,30 +296,63 @@ class FusionPolicy:
         quant_short = bool(quant and getattr(quant.direction, "value", "") == "short")
         quant_strength = float(getattr(quant, "strength", 0.0) or 0.0)
         d.quant_signal_id = getattr(quant, "signal_id", "") if quant else ""
-        d.quant_contribution = ({"direction": quant.direction.value, "strength": quant_strength,
+        d.quant_contribution = ({"direction": quant.direction.value,
+                                 "strength": quant_strength if math.isfinite(quant_strength) else None,
                                  "confidence": quant.confidence, "calibrated": quant.calibrated,
                                  "model": quant.model_version} if quant else {"missing": True})
 
+        # An AI opinion only participates after its evidence passes admission.
+        # In particular, unsupported bull/bear conflict must not liquidate a
+        # holding, and historical reconstruction must never veto a live entry.
+        rejection = ""
         if llm is None:
-            d.conflict_state = ConflictState.MISSING_LLM
+            rejection = "missing_llm"
+        elif not llm.pit_safe:
+            rejection = "unsafe_pit"
+        elif not all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in (
+                llm.strength, llm.confidence, llm.risk_score, llm.conflict_score)):
+            rejection = "invalid_scores"
+        elif llm.low_evidence:
+            rejection = "low_evidence"
+
+        quant_entry = quant_long and MIN_QUANT_ENTRY_STRENGTH <= quant_strength <= 1.0
+        if rejection:
+            d.conflict_state = (ConflictState.MISSING_LLM if llm is None else
+                                ConflictState.LOW_EVIDENCE if rejection == "low_evidence" else
+                                ConflictState.UNSAFE_LLM)
             d.effective_mode = "quant_only_fallback"
-            d.llm_contribution = {"missing": True}
+            d.llm_signal_id = llm.signal_id if llm else ""
+            d.llm_contribution = {**(llm.to_dict() if llm else {"missing": True}),
+                                  "rejection_reason": rejection}
+            if rejection == "invalid_scores":
+                # Do not leak NaN/Infinity into the JSON audit/API response.
+                d.llm_contribution = {"signal_id": llm.signal_id, "snapshot_id": llm.snapshot_id,
+                                      "rejection_reason": rejection}
             if holding:
                 d.final_signal, d.final_strength = ("reduce", 0.5) if quant_short else ("hold", 1.0)
-                d.explanation = self._t("LLM 信号不可用；持仓管理退化为 quant-only 规则",
-                                 "LLM signal unavailable; position management falls back to quant-only rules")
-            elif quant_long and quant_strength >= 0.6:
+                d.explanation = self._t("LLM 信号未通过准入；持仓按量化规则管理",
+                                 "LLM signal not admitted; manage holdings by quant-only rules")
+            elif quant_entry:
                 d.final_signal, d.final_strength = "buy", 0.75
-                d.explanation = self._t("LLM 信号不可用（QUANT_ONLY_FALLBACK）：按量化信号建仓但降低目标 25%",
-                                 "LLM signal unavailable (QUANT_ONLY_FALLBACK): entering on the quant signal at a 25% reduced target")
+                d.explanation = self._t("LLM 信号未通过准入：按量化信号建仓但降低目标 25%",
+                                 "LLM signal not admitted: enter on quant at a 25% reduced target")
             else:
                 d.final_signal = "no_action"
-                d.explanation = self._t("LLM 信号不可用且量化信号不足以单独驱动",
-                                 "LLM signal unavailable and the quant signal is too weak to drive alone")
+                d.explanation = self._t("LLM 信号未通过准入且量化未达开仓门槛",
+                                 "LLM signal not admitted and quant does not clear the entry threshold")
+            d.explanation += f" ({rejection})"
             return d
 
         d.llm_signal_id = llm.signal_id
         d.llm_contribution = llm.to_dict()
+
+        if not holding and not quant_entry:
+            d.final_signal = "watch" if llm.direction in BULLISH_DIRS else "no_action"
+            d.explanation = self._t(
+                f"量化未达开仓门槛 {MIN_QUANT_ENTRY_STRENGTH:.2f}：LLM 不得单独触发买入",
+                f"Quant does not clear the {MIN_QUANT_ENTRY_STRENGTH:.2f} entry threshold; "
+                "the LLM cannot initiate a buy")
+            return d
 
         if llm.direction == ResearchDirection.UNCERTAIN:
             d.conflict_state = ConflictState.HIGH_INTERNAL_LLM_CONFLICT
@@ -322,7 +360,7 @@ class FusionPolicy:
                 d.final_signal, d.final_strength = "reduce", 0.5
                 d.explanation = self._t("LLM bull/bear 同时强（内部高冲突）：持仓减半，等待证据收敛",
                                  "LLM is strongly bullish and bearish at once (high internal conflict): halving the position until the evidence converges")
-            elif quant_long and quant_strength >= 0.6:
+            elif quant_entry:
                 d.final_signal, d.final_strength = "buy", 0.5
                 d.explanation = self._t("量化强但 LLM 高度不确定：仅允许半仓试探",
                                  "Quant is strong but the LLM is highly uncertain: a half-size probe only")
@@ -330,27 +368,6 @@ class FusionPolicy:
                 d.final_signal = "no_action"
                 d.explanation = self._t("LLM 内部高冲突且量化不强：观望",
                                  "High internal LLM conflict and a weak quant signal: stand aside")
-            return d
-
-        if llm.low_evidence:
-            d.conflict_state = ConflictState.LOW_EVIDENCE
-            # low-evidence LLM must not veto a strong quant signal, but it
-            # cannot confirm either — proceed at reduced size
-            if holding:
-                d.final_signal, d.final_strength = ("reduce", 0.5) if quant_short else ("hold", 1.0)
-                d.explanation = self._t("LLM 证据不足（citation/selection 低）：持仓按量化规则管理",
-                                 "Insufficient LLM evidence (low citation/selection): manage the position by quant rules")
-            elif quant_long and quant_strength >= 0.6:
-                d.final_signal, d.final_strength = "buy", 0.75
-                d.explanation = self._t(
-                    f"LLM 证据薄弱（citation-damped conf {llm.confidence:.2f}）"
-                    f"，不足以确认或否决：按量化信号 75% 目标执行",
-                    f"Weak LLM evidence (citation-damped conf {llm.confidence:.2f}) — enough to neither "
-                    f"confirm nor veto: execute the quant signal at 75% of target")
-            else:
-                d.final_signal = "no_action"
-                d.explanation = self._t("证据不足且量化不强：观望",
-                                 "Insufficient evidence and a weak quant signal: stand aside")
             return d
 
         llm_bull = llm.direction in BULLISH_DIRS
@@ -439,19 +456,43 @@ class ResearchFreshnessPolicy:
 
     def is_fresh(self, snap: TradingResearchSnapshot, *, now: datetime | None = None,
                  day_change_pct: float = 0.0, quant_turned_short: bool = False) -> bool:
+        return not self.invalidation_reason(snap, now=now, day_change_pct=day_change_pct,
+                                            quant_turned_short=quant_turned_short)
+
+    def invalidation_reason(self, snap: TradingResearchSnapshot, *, now: datetime | None = None,
+                            day_change_pct: float = 0.0, quant_turned_short: bool = False) -> str:
+        """An expired/invalid snapshot is unavailable, even if refresh is denied.
+
+        Age starts at the evidence cutoff, not completion: a slow investigation
+        must not make old evidence young again. All timestamps need timezones.
+        """
+        if not snap.pit_safe or snap.research_only:
+            return "unsafe_pit"
+        if snap.research_mode != "llm":
+            return "not_llm_research"
         now = now or _now()
         try:
-            age_h = (now - datetime.fromisoformat(snap.generated_at)).total_seconds() / 3600
-        except ValueError:
-            return False
-        if age_h > self.max_age_hours:
-            return False
+            cutoff = datetime.fromisoformat(snap.as_of)
+            generated = datetime.fromisoformat(snap.generated_at)
+            available = datetime.fromisoformat(snap.available_at)
+            if any(dt.utcoffset() is None for dt in (cutoff, generated, available, now)):
+                return "invalid_timestamp"
+        except (TypeError, ValueError):
+            return "invalid_timestamp"
+        if available > now:
+            return "future_snapshot"
+        if not cutoff <= generated <= available:
+            return "invalid_timestamp_order"
+        if (now - cutoff).total_seconds() / 3600 > self.max_age_hours:
+            return "expired"
         # material triggers force refresh even when recent
+        if not math.isfinite(day_change_pct):
+            return "invalid_market_move"
         if abs(day_change_pct) >= self.material_day_move_pct:
-            return False
+            return "material_price_move"
         if quant_turned_short and snap.thesis_direction in BULLISH_DIRS:
-            return False
-        return True
+            return "quant_reversal"
+        return ""
 
 
 class LLMCallBudget:
@@ -532,12 +573,15 @@ class TradingResearchService:
         """Returns (snapshot, status). status ∈ fresh_reuse | generated |
         budget_denied:* | failed:*"""
         cached = self.cache.get(secid)
-        if cached is not None and self.freshness.is_fresh(
-                cached, day_change_pct=day_change_pct, quant_turned_short=quant_turned_short):
-            return cached, "fresh_reuse"
+        invalidation = "missing_snapshot"
+        if cached is not None:
+            invalidation = self.freshness.invalidation_reason(
+                cached, day_change_pct=day_change_pct, quant_turned_short=quant_turned_short)
+            if not invalidation:
+                return cached, "fresh_reuse"
         ok, why = self.budget.allow(high_severity=holding and quant_turned_short)
         if not ok:
-            return cached, f"budget_denied:{why}"
+            return None, f"budget_denied:{why}; research_unavailable={invalidation}"
         try:
             pipeline = self._get_pipeline()
             t0 = time.time()
@@ -552,6 +596,11 @@ class TradingResearchService:
                 input_tokens=getattr(usage, "input_tokens", 0) or 0,
                 output_tokens=getattr(usage, "output_tokens", 0) or 0)
             self.budget.record(snap.input_tokens + snap.output_tokens)
+            # Newly generated research also needs valid temporal provenance.
+            # Price/reversal triggers only invalidate earlier cached research.
+            invalidation = self.freshness.invalidation_reason(snap)
+            if invalidation:
+                return None, f"failed:research_unavailable={invalidation}"
             self.cache[secid] = snap
             if self.feature_store is not None:
                 try:

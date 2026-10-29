@@ -507,7 +507,12 @@ class ShadowArena:
             by_type[key] = by_type.get(key, 0) + 1
         vetoes = sum(n for k, n in by_type.items() if k.endswith(("->no_action", "->watch")))
         reduces = sum(n for k, n in by_type.items() if k.endswith(("->reduce", "->sell")))
-        confirmations = len(deltas) - len(changed)
+        # Equal decisions are an AI confirmation only when usable AI research
+        # actually participated. Missing/legacy provenance cannot prove that.
+        confirmations = sum(
+            not d.get("llm_changed_decision")
+            and (d.get("arm_decisions", {}).get("llm_hybrid", {}).get("source") == "llm_fusion")
+            for d in deltas)
         return {
             "decisions_total": len(deltas),
             "decision_change_count": len(changed),
